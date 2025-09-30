@@ -9,7 +9,7 @@ git clone https://github.com/JeanVanDyk/PyBH.git
 
 ## Contributing
 We appreciate being notified of problems with the existing PyBH code. To do so, you should filed an issue on the GitHub Issue Tracker. But before doing so, do not forget to check whether the issue is already being adressed or not using the GitHub search tool to look for key words in the project issue tracker.
-However, the best way to contribute is to submit your code to improve the librairie with pull request. Here are the steps to do so :
+However, the best way to contribute is to submit your code to improve the librairie with pull request. Here are the steps to do so :  
 1 - If you have not already done so, fork the project repository by clicking on the 'Fork' button near the top right of the main repository page. This creates a copy of the code under your GitHub user account.  
 2 - Clone **your fork** of the repo from you GitHUb account to you local disk, and add the base repository as a remote  
 ```bash
