@@ -15,7 +15,7 @@ However, the best way to contribute is to submit your code to improve the librai
 ```bash
 git clone git@github.com:<your GitHub handle>/PyBH.git
 cd PyBH
-git remote add upstream git@github.com:JeanVanDyk/PyBH.git
+git remote add upstream git@github.com:PyBHealth/PyBH.git
 ```
 3 - Create a feature branch (e.g. `my-feature`) to hold your development changes :  
 ```bash
