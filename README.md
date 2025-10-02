@@ -31,7 +31,7 @@ conda create -n my_env
 git add modified_files
 git commit -m "Summary of your changes"
 ```
-To record your changes locally. After committing, it is a good idea to sync with the base repository in case there have been any whanges:
+To record your changes locally. After committing, it is a good idea to sync with the base repository in case there have been any changes:
 ```bash
 git fetch upstream
 git rebase upstream/main
