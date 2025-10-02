@@ -19,7 +19,7 @@ git remote add upstream git@github.com:PyBHealth/PyBH.git
 ```
 3 - Create a feature branch (e.g. `my-feature`) to hold your development changes :  
 ```bash
-git checkout -b my feature
+git checkout -b my-feature
 ```
 **Always use a feature branch**. It's good practice to never routinely work on the `main` branch of any repository.  
 4 - Create an environment with all the requirements (to be determined). My recommendation would be to use Anaconda, and then from the Anaconda prompt :
