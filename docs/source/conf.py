@@ -3,9 +3,15 @@
 # For the full list of built-in configuration values, see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath("../.."))
+
 # autodoc_mock_imports
 # This avoids autodoc breaking when it can't find packages imported in the code.
 # https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html#confval-autodoc_mock_imports # noqa: E501
+
 autodoc_mock_imports = [
     "arviz",
     "matplotlib",
