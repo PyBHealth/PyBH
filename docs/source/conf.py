@@ -6,7 +6,7 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../.."))
+sys.path.insert(0, os.path.abspath(".."))
 
 # autodoc_mock_imports
 # This avoids autodoc breaking when it can't find packages imported in the code.
@@ -46,8 +46,6 @@ extensions = [
 ]
 
 autosummary_generate = True  # génère les fichiers automatiquement
-html_theme = "sphinx_rtd_theme"
-
 templates_path = ["_templates"]
 exclude_patterns = []
 
