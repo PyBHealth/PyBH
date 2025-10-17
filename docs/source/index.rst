@@ -15,4 +15,9 @@ documentation for details.
    :maxdepth: 2
    :caption: Contents:
 
-   api/modules
+   PyBH
+
+.. autosummary::
+   :toctree: _autosummary
+
+   PyBH
