@@ -17,6 +17,7 @@ autodoc_mock_imports = [
     "matplotlib",
     "numpy",
     "pandas",
+    "pytensor",
     "patsy",
     "pymc",
     "scipy",
@@ -42,9 +43,16 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinx_autodoc_typehints",
-    "myst_parser",
+    "myst_nb",
 ]
 
+nb_execution_mode = "off"
+
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".ipynb": "myst-nb",
+    ".myst": "myst-nb",
+}
 autosummary_generate = True  # génère les fichiers automatiquement
 templates_path = ["_templates"]
 exclude_patterns = []

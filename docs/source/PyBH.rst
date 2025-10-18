@@ -13,7 +13,7 @@ Subpackages
 Submodules
 ----------
 
-PyBH.pymc\_models module
+PyBH.pymc_models module
 ------------------------
 
 .. automodule:: PyBH.pymc_models

@@ -1,4 +1,0 @@
-﻿PyBH
-====
-
-.. automodule:: PyBH

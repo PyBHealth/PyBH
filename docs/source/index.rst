@@ -17,7 +17,8 @@ documentation for details.
 
    PyBH
 
-.. autosummary::
-   :toctree: _autosummary
+.. toctree::
+   :maxdepth: 2
+   :caption: Notebooks
 
-   PyBH
+   notebooks/linear_regression

@@ -37,6 +37,8 @@ repos:
     hooks:
       - id: codespell
         name: Check spelling
+        exclude: '.*\.ipynb'
+        args: ["--ignore-words-list", "nd"]
         additional_dependencies:
           - tomli  # support for pyproject.toml configuration
 
@@ -59,3 +61,4 @@ repos:
       - id: trailing-whitespace
       - id: mixed-line-ending
       - id: check-added-large-files
+        exclude: '.*\.ipynb$'
