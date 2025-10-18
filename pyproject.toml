@@ -20,7 +20,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pre-commit", "black", "isort", "codespell"]
 test = ["pytest", "pytest-cov", "nbformat", "nbconvert"]
-docs = ["sphinx", "sphinx-autodoc-typehints", "sphinx-rtd-theme", "sphinxcontrib-napoleon", "myst-parser"]
+docs = ["sphinx", "sphinx-autodoc-typehints", "sphinx-rtd-theme", "sphinxcontrib-napoleon", "myst-nb"]
 
 [tool.pytest.ini_options]
 addopts = [
