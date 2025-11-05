@@ -7,6 +7,7 @@ import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
 from arviz import r2_score
+from pymc_extras.prior import Prior
 
 
 class PyMCModel(pm.Model):
@@ -15,7 +16,13 @@ class PyMCModel(pm.Model):
     useful for causal inference.
     """
 
-    def __init__(self, sample_kwargs: Optional[Dict[str, Any]] = None):
+    default_priors = {}
+
+    def __init__(
+        self,
+        sample_kwargs: Optional[Dict[str, Any]] = None,
+        priors: dict[str, Any] | None = None,
+    ):
         """
         :param sample_kwargs: A dictionary of kwargs that get unpacked and passed to the
             :func:`pymc.sample` function. Defaults to an empty dictionary.
@@ -24,9 +31,13 @@ class PyMCModel(pm.Model):
         self.idata = None
         self.sample_kwargs = sample_kwargs if sample_kwargs is not None else {}
 
+        self.priors = {**self.default_priors, **(priors or {})}
+
     def build_model(self, X, y, coords) -> None:
         """Build the model, must be implemented by subclass."""
-        raise NotImplementedError("This method must be implemented by a subclass")
+        raise NotImplementedError(
+            "This method must be implemented by a subclass"
+        )  # pragma: no cover
 
     def _data_setter(self, X: xr.DataArray) -> None:
         """
@@ -44,8 +55,8 @@ class PyMCModel(pm.Model):
         """
         new_no_of_observations = X.shape[0]
 
-        # Use integer indices for obs_ind to avoid datetime
-        # compatibility issues with PyMC
+        # Use integer indices for obs_ind to avoid
+        # datetime compatibility issues with PyMC
         obs_coords = np.arange(new_no_of_observations)
 
         with self:
@@ -69,6 +80,11 @@ class PyMCModel(pm.Model):
         # Ensure random_seed is used in sample_prior_predictive() and
         # sample_posterior_predictive() if provided in sample_kwargs.
         random_seed = self.sample_kwargs.get("random_seed", None)
+
+        # Merge priors with precedence: user-specified > data-driven > defaults
+        # Data-driven priors are computed first,
+        # then user-specified priors override them
+        self.priors = {**self.priors_from_data(X, y), **self.priors}
 
         self.build_model(X, y, coords)
         with self:
@@ -153,6 +169,15 @@ class LinearRegression(PyMCModel):
         y &\sim \mathrm{Normal}(\mu, \sigma) \\
     """  # noqa: W605
 
+    default_priors = {
+        "beta": Prior("Normal", mu=0, sigma=50, dims=["treated_units", "coeffs"]),
+        "y_hat": Prior(
+            "Normal",
+            sigma=Prior("HalfNormal", sigma=1, dims=["treated_units"]),
+            dims=["obs_ind", "treated_units"],
+        ),
+    }
+
     def build_model(self, X, y, coords):
         """
         Defines the PyMC model
@@ -166,9 +191,8 @@ class LinearRegression(PyMCModel):
             self.add_coords(coords)
             X = pm.Data("X", X, dims=["obs_ind", "coeffs"])
             y = pm.Data("y", y, dims=["obs_ind", "treated_units"])
-            beta = pm.Normal("beta", 0, 50, dims=["treated_units", "coeffs"])
-            sigma = pm.HalfNormal("sigma", 1, dims="treated_units")
+            beta = self.priors["beta"].create_variable("beta")
             mu = pm.Deterministic(
                 "mu", pt.dot(X, beta.T), dims=["obs_ind", "treated_units"]
             )
-            pm.Normal("y_hat", mu, sigma, observed=y, dims=["obs_ind", "treated_units"])
+            self.priors["y_hat"].create_likelihood_variable("y_hat", mu=mu, observed=y)
