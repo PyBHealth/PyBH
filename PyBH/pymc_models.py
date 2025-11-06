@@ -7,7 +7,6 @@ import pymc as pm
 import pytensor.tensor as pt
 import xarray as xr
 from arviz import r2_score
-from pymc_extras.prior import Prior
 
 
 class PyMCModel(pm.Model):
@@ -84,7 +83,7 @@ class PyMCModel(pm.Model):
         # Merge priors with precedence: user-specified > data-driven > defaults
         # Data-driven priors are computed first,
         # then user-specified priors override them
-        self.priors = {**self.priors_from_data(X, y), **self.priors}
+        self.priors = {**self.priors}
 
         self.build_model(X, y, coords)
         with self:
@@ -169,15 +168,6 @@ class LinearRegression(PyMCModel):
         y &\sim \mathrm{Normal}(\mu, \sigma) \\
     """  # noqa: W605
 
-    default_priors = {
-        "beta": Prior("Normal", mu=0, sigma=50, dims=["treated_units", "coeffs"]),
-        "y_hat": Prior(
-            "Normal",
-            sigma=Prior("HalfNormal", sigma=1, dims=["treated_units"]),
-            dims=["obs_ind", "treated_units"],
-        ),
-    }
-
     def build_model(self, X, y, coords):
         """
         Defines the PyMC model
@@ -191,8 +181,16 @@ class LinearRegression(PyMCModel):
             self.add_coords(coords)
             X = pm.Data("X", X, dims=["obs_ind", "coeffs"])
             y = pm.Data("y", y, dims=["obs_ind", "treated_units"])
-            beta = self.priors["beta"].create_variable("beta")
+            beta = pm.Normal("beta", mu=0, sigma=50, dims=["treated_units", "coeffs"])
             mu = pm.Deterministic(
                 "mu", pt.dot(X, beta.T), dims=["obs_ind", "treated_units"]
             )
-            self.priors["y_hat"].create_likelihood_variable("y_hat", mu=mu, observed=y)
+            sigma = pm.HalfNormal("sigma", sigma=5, dims=["treated_units"])
+            y_hat = pm.Normal(
+                "y_hat",
+                mu=mu,
+                sigma=sigma,
+                observed=y,
+                dims=["obs_ind", "treated_units"],
+            )
+            y_hat = pm.Deterministic("y_hat", y_hat)
