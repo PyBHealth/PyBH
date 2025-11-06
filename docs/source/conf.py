@@ -43,6 +43,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.autosummary",
     "sphinx_autodoc_typehints",
+    "sphinx.ext.mathjax",
     "myst_nb",
 ]
 
@@ -53,6 +54,12 @@ source_suffix = {
     ".ipynb": "myst-nb",
     ".myst": "myst-nb",
 }
+
+# Enable MyST math support for $...$, $$...$$, and \[...\]
+myst_enable_extensions = [
+    "dollarmath",
+    "amsmath",
+]
 autosummary_generate = True  # génère les fichiers automatiquement
 templates_path = ["_templates"]
 exclude_patterns = []
