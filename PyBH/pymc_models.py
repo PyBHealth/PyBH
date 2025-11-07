@@ -186,11 +186,10 @@ class LinearRegression(PyMCModel):
                 "mu", pt.dot(X, beta.T), dims=["obs_ind", "treated_units"]
             )
             sigma = pm.HalfNormal("sigma", sigma=5, dims=["treated_units"])
-            y_hat = pm.Normal(
+            y_hat = pm.Normal(  # noqa: F841
                 "y_hat",
                 mu=mu,
                 sigma=sigma,
                 observed=y,
                 dims=["obs_ind", "treated_units"],
             )
-            y_hat = pm.Deterministic("y_hat", y_hat)
