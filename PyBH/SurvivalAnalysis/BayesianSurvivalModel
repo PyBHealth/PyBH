@@ -1,0 +1,101 @@
+from abc import ABC, abstractmethod
+from typing import Dict, Any, Optional
+import pandas as pd
+import arviz as az
+
+class BayesianSurvivalModel(ABC):
+    """
+    Abstract Base Class for all Bayesian Survival Models.
+    This defines the interface (contract) that all specific implementations 
+    (e.g., Cox, Weibull) must adhere to.
+    """
+
+    def __init__(self, name: str, **kwargs):
+        """
+        Common initializer.
+        Args:
+            name (str): Name of the model (e.g., 'Cox PH', 'Weibull').
+            **kwargs: Additional model-specific or sampling parameters.
+        """
+        self.model_name = name
+        self.idata: Optional[az.InferenceData] = None  # Stores MCMC results after training
+        self.model_params: Dict[str, Any] = kwargs
+
+    @abstractmethod 
+    def build_model(self, data: pd.DataFrame, time_col: str, event_col: str, **kwargs):
+        """
+        Abstract method to build the probabilistic model (PyMC/TFP).
+        MUST be implemented by the child class (Cox/Weibull).
+        
+        Args:
+            data (pd.DataFrame): Training data.
+            time_col (str): Name of the column containing survival time.
+            event_col (str): Name of the column containing event status (1=event, 0=censored).
+        """
+        pass 
+
+    def fit(self, data: pd.DataFrame, time_col: str, event_col: str, draws: int = 2000, **kwargs) -> az.InferenceData:
+        """
+        Standard method to train the model (run MCMC sampling).
+
+        Args:
+            data (pd.DataFrame): The training dataset.
+            time_col (str): Survival time column name.
+            event_col (str): Event status column name.
+            draws (int): Number of MCMC samples to draw. Defaults to 2000.
+            **kwargs: Additional arguments passed to the sampler.
+            
+        Returns:
+            az.InferenceData: Object containing the posterior samples.
+        """
+        # 1. Data Validation 
+        if time_col not in data.columns or event_col not in data.columns:
+            raise ValueError(f"Columns {time_col} or {event_col} not found in dataset.")
+
+        # 2. Build the specific model (Cox or Weibull) via the abstract method
+        model = self.build_model(data, time_col, event_col, **kwargs)
+        print(f"Training {self.model_name} model with {draws} draws...")
+        
+        # 3. MCMC Sampling (Generic logic)
+        self.idata = az.InferenceData() 
+        print("Training complete.")
+
+        return self.idata
+
+    def check_diagnostics(self) -> None:
+        """
+        Checks MCMC convergence metrics.
+        Provides a simple feedback to the user.
+        """
+        if self.idata is None:
+            print("Error: Model has not been trained yet. Please run .fit() first.")
+            return
+
+        # Check R-hat (Gelman-Rubin statistic)
+        # R-hat > 1.05 usually indicates poor convergence
+        rhat_max = az.rhat(self.idata).max().to_numpy() 
+        
+        if rhat_max > 1.05:
+            print(f"Convergence Warning: Max R-hat is {rhat_max:.2f}. Results may be unreliable.")
+        else:
+            print(f"Convergence OK: Max R-hat is {rhat_max:.2f}.")
+
+
+    def plot_survival_function(self, **kwargs):
+        """
+        Generates the survival curve with Credible Intervals.
+        
+        Args:
+            TBD
+        """
+        if self.idata is None:
+            print("Please train the model first.")
+            return
+        
+        print(f"Plotting survival curve for {self.model_name}...")
+        # Plotting logic (matplotlib/arviz)
+        pass
+
+
+
+    
