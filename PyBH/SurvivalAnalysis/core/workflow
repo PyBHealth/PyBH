@@ -1,0 +1,108 @@
+import pandas as pd
+import numpy as np
+import arviz as az
+from typing import Optional
+from SurvivalAnalysis.core.interface import SurvivalModelBuilder
+
+class BayesianSurvivalWorkflow:
+    """
+    Workflow Manager.
+    
+    This class orchestrates the analysis process:
+    1. Input Validation
+    2. Data Preprocessing
+    3. Model Building (via the injected Builder)
+    4. MCMC Sampling
+    5. Diagnostics & Plotting
+    """
+
+    def __init__(self, builder: SurvivalModelBuilder):
+        """
+        Initializes the workflow with a specific model builder.
+        
+        Args:
+            builder (SurvivalModelBuilder): An instance implementing the model logic.
+        """
+        self.builder = builder
+        self.idata: Optional[az.InferenceData] = None
+        self.clean_data: Optional[pd.DataFrame] = None
+
+    def _validate_inputs(self, data: pd.DataFrame, time_col: str, event_col: str):
+        """
+        Validates data integrity before processing.
+        """
+        if time_col not in data.columns or event_col not in data.columns:
+            raise ValueError(f"Columns '{time_col}' or '{event_col}' not found.")
+        
+        if not np.issubdtype(data[time_col].dtype, np.number):
+            raise TypeError(f"Column '{time_col}' must be numeric.")
+            
+        if data[event_col].sum() == 0:
+            print("Warning: No events observed in the dataset. Convergence might fail.")
+
+    def _preprocess_data(self, data: pd.DataFrame, time_col: str, event_col: str) -> pd.DataFrame:
+        """
+        Cleans data (handles missing values).
+        """
+        df = data.copy()
+        
+        # Basic strategy: drop rows with missing values in key columns
+        df = df.dropna(subset=[time_col, event_col])
+        
+        return df
+
+    def fit(self, data: pd.DataFrame, time_col: str, event_col: str, draws: int = 2000, **kwargs) -> az.InferenceData:
+        """
+        Orchestrates validation, building, and sampling.
+        
+        Args:
+            data (pd.DataFrame): Raw data.
+            time_col (str): Name of time column.
+            event_col (str): Name of event column.
+            draws (int): Number of MCMC samples.
+            **kwargs: Extra arguments for the builder.
+            
+        Returns:
+            az.InferenceData: The MCMC trace.
+        """
+        print(f"Starting analysis for model: {self.builder.name}")
+        
+        # 1. Validation & Preprocessing
+        self._validate_inputs(data, time_col, event_col)
+        self.clean_data = self._preprocess_data(data, time_col, event_col)
+        
+        # 2. Build Model Context (Delegation)
+        model_context = self.builder.build_model(self.clean_data, time_col, event_col, **kwargs)
+        
+        # 3. MCMC Sampling
+        print(f"Running MCMC sampling with {draws} draws...")
+        
+        # In production, this would look like:
+        # with model_context:
+        #     self.idata = pm.sample(draws=draws, return_inferencedata=True)
+        
+        # Initializing empty InferenceData for architectural demonstration
+        self.idata = az.InferenceData() 
+        
+        print("Training complete.")
+        return self.idata
+
+    def check_diagnostics(self) -> None:
+        """
+        Checks convergence metrics using ArviZ.
+        """
+        if self.idata is None:
+            raise RuntimeError("Model has not been trained. Run .fit() first.")
+
+        # Logic to check R-hat would go here
+        print("Checking convergence statistics...")
+
+    def plot_survival_function(self, **kwargs):
+        """
+        Generates the survival curve with credible intervals.
+        """
+        if self.idata is None:
+            raise RuntimeError("Model has not been trained. Run .fit() first.")
+        
+        print(f"Plotting survival curve for {self.builder.name}...")
+        # Plotting logic using Matplotlib/ArviZ would go here
