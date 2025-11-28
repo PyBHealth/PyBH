@@ -1,0 +1,41 @@
+from abc import ABC, abstractmethod
+import pandas as pd
+from typing import Any
+
+class SurvivalModelBuilder(ABC):
+    """
+    INTERFACE CONTRACT (Abstract Base Class).
+    
+    This class defines the rules that all specific model builders (Cox, Weibull, etc.)
+    must follow to be compatible with the Workflow Engine.
+    
+    Responsibility:
+    This class handles NEITHER training NOR plotting.
+    Its sole purpose is to define the mathematical structure (Priors + Likelihood).
+    """
+
+    def __init__(self, name: str):
+        """
+        Args:
+            name (str): The display name of the model (e.g., "Cox PH", "Weibull AFT").
+                        Used for labeling plots and logs.
+        """
+        self.name = name
+
+    @abstractmethod
+    def build_model(self, data: pd.DataFrame, time_col: str, event_col: str, **kwargs) -> Any:
+        """
+        MANDATORY Abstract Method.
+        The specific PyMC / TFP logic must be implemented here by the model developers.
+
+        Args:
+            data (pd.DataFrame): The preprocessed training dataset from the Engine.
+            time_col (str): Name of the column containing survival time.
+            event_col (str): Name of the column containing event status.
+            **kwargs: Additional model-specific hyperparameters.
+
+        Returns:
+            The model context object (e.g., a pm.Model() instance).
+            The Engine will use this object to run the MCMC sampling.
+        """
+        pass
