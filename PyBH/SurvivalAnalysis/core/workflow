@@ -16,29 +16,30 @@ class BayesianSurvivalWorkflow:
     5. Diagnostics & Plotting
     """
 
-    def __init__(self, builder: SurvivalModelBuilder):
-        """
-        Initializes the workflow with a specific model builder.
-        
-        Args:
-            builder (SurvivalModelBuilder): An instance implementing the model logic.
-        """
-        self.builder = builder
-        self.idata: Optional[az.InferenceData] = None
-        self.clean_data: Optional[pd.DataFrame] = None
-
-    def _validate_inputs(self, data: pd.DataFrame, time_col: str, event_col: str):
+    def validate_inputs(self, data: pd.DataFrame, time_col: str, event_col: str):
         """
         Validates data integrity before processing.
-        """
-        if time_col not in data.columns or event_col not in data.columns:
-            raise ValueError(f"Columns '{time_col}' or '{event_col}' not found.")
         
-        if not np.issubdtype(data[time_col].dtype, np.number):
-            raise TypeError(f"Column '{time_col}' must be numeric.")
+        """
+        # 1. Check if DataFrame is empty
+        if data.empty:
+            raise ValueError("The input dataset is empty.")
+
+        # 2. Check column existence
+        if time_col not in data.columns or event_col not in data.columns:
+            raise ValueError(f"Columns '{time_col}' or '{event_col}' not found in dataset.")
+
+        # 3. Type Validation (Numeric or Date)
+        is_numeric = np.issubdtype(data[time_col].dtype, np.number)
+        is_datetime = pd.api.types.is_datetime64_any_dtype(data[time_col])
+
+        if not is_numeric and not is_datetime:
+            raise TypeError(f"Column '{time_col}' must be numeric or datetime format.")
             
+        # 4. Check if there is at least one event (otherwise survival analysis is useless)
         if data[event_col].sum() == 0:
             print("Warning: No events observed in the dataset. Convergence might fail.")
+
 
     def _preprocess_data(self, data: pd.DataFrame, time_col: str, event_col: str) -> pd.DataFrame:
         """
@@ -51,41 +52,6 @@ class BayesianSurvivalWorkflow:
         
         return df
 
-    def fit(self, data: pd.DataFrame, time_col: str, event_col: str, draws: int = 2000, **kwargs) -> az.InferenceData:
-        """
-        Orchestrates validation, building, and sampling.
-        
-        Args:
-            data (pd.DataFrame): Raw data.
-            time_col (str): Name of time column.
-            event_col (str): Name of event column.
-            draws (int): Number of MCMC samples.
-            **kwargs: Extra arguments for the builder.
-            
-        Returns:
-            az.InferenceData: The MCMC trace.
-        """
-        print(f"Starting analysis for model: {self.builder.name}")
-        
-        # 1. Validation & Preprocessing
-        self._validate_inputs(data, time_col, event_col)
-        self.clean_data = self._preprocess_data(data, time_col, event_col)
-        
-        # 2. Build Model Context (Delegation)
-        model_context = self.builder.build_model(self.clean_data, time_col, event_col, **kwargs)
-        
-        # 3. MCMC Sampling
-        print(f"Running MCMC sampling with {draws} draws...")
-        
-        # In production, this would look like:
-        # with model_context:
-        #     self.idata = pm.sample(draws=draws, return_inferencedata=True)
-        
-        # Initializing empty InferenceData for architectural demonstration
-        self.idata = az.InferenceData() 
-        
-        print("Training complete.")
-        return self.idata
 
     def check_diagnostics(self) -> None:
         """
