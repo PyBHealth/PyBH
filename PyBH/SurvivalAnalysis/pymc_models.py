@@ -84,18 +84,26 @@ class BayesianPiecewiseCoxPH(BayesianSurvivalModel):
     Bayesian Piecewise Constant Cox Proportional Hazards Model.
     """
 
-    def __init__(self, time_intervals=5):
+    def __init__(self, interval_length=5, priors=None):
         super().__init__()
-        self.cuts = time_intervals
+        # 1. Define the piece-wise intervals
+        self.interval_length = interval_length 
+        
+        # 2. Allow custom priors for flexibility 
+        self.priors = priors if priors else {
+            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
+            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
+            "lambda_beta": 0.01       # Gamma beta for baseline hazard
+        }
+        
         self.interval_bounds_ = None
         self._feature_names = None
-        self._beta_means = None
-        self._lambda_means = None
+
 
     def build_model(self, interval_indices, exposures, events, X):
         """
         Define the PyMC model structure using the pre-processed arrays.
-        
+            
         Parameters:
         - interval_indices: Array of interval IDs for each observation row
         - exposures: Time duration spent in the interval (Delta t)
@@ -113,35 +121,29 @@ class BayesianPiecewiseCoxPH(BayesianSurvivalModel):
 
         with pm.Model(coords=coords) as model:
             # --- Priors ---
-            # Regression coefficients (beta): Normal prior on beta 
+            # Regression coefficients (beta): Normal prior
             beta = pm.Normal("beta", mu=0, sigma=10, dims="coeffs")
             
-            # Baseline hazard (lambda_0): Gamma prior on lambda_j 
-            # Corresponds to lambda_j ~ Gamma(alpha0, beta0) in the issue
+            # Baseline hazard (lambda_0): Gamma prior 
+            # We use independent priors for each interval
             lambda_baseline = pm.Gamma("lambda0", alpha=0.01, beta=0.01, dims="intervals")
             
             # Map the baseline hazard to the specific intervals for each observation
             lambda_i = lambda_baseline[interval_indices]
             
-            # --- Linear Predictor ---
-            # lambda(t) = lambda_0(t) exp(x * beta)
-            log_risk = pm.math.dot(X, beta) 
+            # --- Poisson Means Calculation ---
+            # The mean of the Poisson process for a specific interval is:
+            # mu = exposure * lambda_0(t) * exp(x * beta)
             
-            # --- Log-Likelihood Construction  ---
+            # Calculate the risk score: exp(X * beta)
+            risk = pm.math.exp(pm.math.dot(X, beta))
             
-            # Part A: Hazard contribution (only added if event occurred, delta=1)
-            # Formula: delta_i * [ log(lambda_j) + beta * x_i ] 
-            hazard_term = events * (pm.math.log(lambda_i) + log_risk)
+            # Calculate mu
+            mu = exposures * lambda_i * risk
             
-            # Part B: Survival contribution (Cumulative Hazard)
-            # Formula: - exp(beta * x_i) * lambda_j * Delta_t 
-            # This accounts for the probability of surviving the duration of the interval
-            survival_term = pm.math.exp(log_risk) * lambda_i * exposures
-            
-            # Combine terms: log L = Hazard_Term - Cumulative_Hazard_Term
-            # We use pm.Potential to add this custom likelihood to the model 
-            log_lik = hazard_term - survival_term
-            
-            pm.Potential("log_likelihood", log_lik)
+            # --- Likelihood ---
+            # We use the Poisson approximation for the piece-wise exponential model
+            # observed=events matches the 'd_ij' (death indicator) from the PyMC example
+            pm.Poisson("likelihood", mu=mu, observed=events)
             
         return model
