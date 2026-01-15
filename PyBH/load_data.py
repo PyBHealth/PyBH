@@ -248,6 +248,10 @@ class SurvivalDataProcessor:
                 self.schema.id_col
             ].values
 
+        save_path = DATA_PATH / "processed_dataset.csv"
+        self.data_processed.to_csv(save_path, index=False)
+        self.logger.info(f"Processed data saved to: {save_path}")
+
         self.logger.success("Preprocessing Pipeline Completed")
         return self.data_processed
 
