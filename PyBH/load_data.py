@@ -59,7 +59,8 @@ class SurvivalDataProcessor:
         self.logger.substep("Schema Classification Details")
         with self.logger.indent():
             self.logger.info(f"• ID Col:          {self.schema.id_col}")
-            self.logger.info(f"• Duration Col:    {self.schema.duration_col}")
+            self.logger.info(f"• Start Col:       {self.schema.start_col}")
+            self.logger.info(f"• End or Dur Col:  {self.schema.duration_col}")
             self.logger.info(f"• Event Col:       {self.schema.event_col}")
             self.logger.info(f"• Numerical Cols:  {self.schema.numerical_cols}")
             self.logger.info(f"• Categorical Cols:{self.schema.categorical_cols}")
