@@ -78,3 +78,65 @@ class BayesianSurvivalModel(ABC):
         Higher is better (0.5 is random, 1.0 is perfect).
         """
         pass
+
+class Cox(BayesianSurvivalModel):
+    """
+    Bayesian Piecewise Constant Cox Proportional Hazards Model.
+    """
+
+    def __init__(self, interval_length=5, priors=None):
+        super().__init__()
+        # 1. Define the piece-wise intervals
+        self.interval_length = interval_length 
+        
+        # 2. Allow custom priors for flexibility 
+        self.priors = priors if priors else {
+            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
+            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
+            "lambda_beta": 0.01       # Gamma beta for baseline hazard
+        }
+        
+        self.interval_bounds_ = None
+        self._feature_names = None
+
+
+    def build_model(self, interval_indices, exposures, events, X, coords):
+        """
+        Define the PyMC model structure using the pre-processed arrays.
+            
+        Parameters:
+        - interval_indices: Array of interval IDs for each observation row
+        - exposures: Time duration spent in the interval (Delta t)
+        - events: Event indicator (1 if event occurred in this interval, 0 otherwise)
+        - X: Covariate matrix (numpy array)
+        """
+        n_intervals = len(self.interval_bounds_) - 1
+        
+        with pm.Model(coords=coords) as model:
+            # --- Priors ---
+            # Regression coefficients (beta): Normal prior
+            beta = pm.Normal("beta", mu=0, sigma=10, dims="coeffs")
+            
+            # Baseline hazard (lambda_0): Gamma prior 
+            # We use independent priors for each interval
+            lambda_baseline = pm.Gamma("lambda0", alpha=0.01, beta=0.01, dims="intervals")
+            
+            # Map the baseline hazard to the specific intervals for each observation
+            lambda_i = lambda_baseline[interval_indices]
+            
+            # --- Poisson Means Calculation ---
+            # The mean of the Poisson process for a specific interval is:
+            # mu = exposure * lambda_0(t) * exp(x * beta)
+            
+            # Calculate the risk score: exp(X * beta)
+            risk = pm.math.exp(pm.math.dot(X, beta))
+            
+            # Calculate mu
+            mu = exposures * lambda_i * risk
+            
+            # --- Likelihood ---
+            # We use the Poisson approximation for the piece-wise exponential model
+            # observed=events matches the 'd_ij' (death indicator) from the PyMC example
+            pm.Poisson("likelihood", mu=mu, observed=events)
+            
+        return model
