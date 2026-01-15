@@ -10,6 +10,7 @@ class DatasetSchema:
     duration_col: str = None
     start_col: str = None
     event_col: str = None
+    id_col: str = None  # <--- The missing field that caused the error
     numerical_cols: List[str] = field(default_factory=list)
     categorical_cols: List[str] = field(default_factory=list)
     dropped_cols: List[str] = field(default_factory=list)
@@ -21,7 +22,6 @@ class SchemaDetector:
         self.schema = DatasetSchema()
 
         # 1. PRIORITY LIST: CENSORSHIP
-        # If we find a 'censor' column, we prefer it (to invert it later)
         self.censor_keywords = ["cens", "censor", "censored"]
 
         # 2. SECONDARY LIST: CLASSIC EVENT
@@ -38,6 +38,7 @@ class SchemaDetector:
             "recurrence",
             "relapse",
             "fail",
+            "observed",
         ]
 
         # 3. TIME Keywords
@@ -89,28 +90,33 @@ class SchemaDetector:
             "survival",
         ]
 
-        self.id_keywords = ["id", "patient", "ref", "index", "subject", "matricule"]
+        self.id_keywords = [
+            "id",
+            "patient",
+            "ref",
+            "index",
+            "subject",
+            "matricule",
+            "ctryname",
+            "country",
+        ]
 
     def infer(self) -> DatasetSchema:
         cols = list(self.df.columns)
 
-        # --- STEP 1: Find Event (Priority Logic) ---
-
-        # A. First explicitly look for a Censorship column
+        # --- STEP 1: Find Event ---
         censor_col = self._find_best_match(
             cols, self.censor_keywords, dtype_filter="number"
         )
 
         if censor_col:
-            # If 'cens' found, take it
             self.schema.event_col = censor_col
         else:
-            # Otherwise, look for a classic 'event' column
             self.schema.event_col = self._find_best_match(
                 cols, self.event_keywords, dtype_filter="number"
             )
 
-        # --- STEP 2: Scan TIME candidates ---
+        # --- STEP 2: Find Time ---
         search_space = [c for c in cols if c != self.schema.event_col]
         time_candidates = []
 
@@ -122,10 +128,10 @@ class SchemaDetector:
                 if pd.api.types.is_numeric_dtype(self.df[col]):
                     time_candidates.append(col)
 
-        # --- STEP 3: Time Decision Logic ---
+        # --- STEP 3: Time Logic ---
         if len(time_candidates) > 2:
             raise ValueError(
-                f"Time ambiguity ({len(time_candidates)} candidate columns). "
+                f"Time ambiguity ({len(time_candidates)} candidates). "
                 "Please configure config.py."
             )
         elif len(time_candidates) == 1:
@@ -139,7 +145,7 @@ class SchemaDetector:
             else:
                 self.schema.start_col, self.schema.duration_col = col_b, col_a
 
-        # --- STEP 4: Classify the Rest ---
+        # --- STEP 4: Classify the Rest (including ID) ---
         exclude_cols = [
             self.schema.duration_col,
             self.schema.start_col,
@@ -149,7 +155,12 @@ class SchemaDetector:
 
         for col in remaining_cols:
             if self._is_id_column(col):
-                self.schema.dropped_cols.append(col)
+                # If no main ID yet, set it
+                if self.schema.id_col is None:
+                    self.schema.id_col = col
+                else:
+                    # Extra IDs go to dropped
+                    self.schema.dropped_cols.append(col)
                 continue
 
             if self._is_categorical(col):
