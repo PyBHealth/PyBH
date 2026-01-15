@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 
-class BayesianSurvivalModel(ABC):
+class PyMCModel(ABC):
     """
     Abstract Base Class for Bayesian Survival models using PyMC.
     Designed to mimic the Lifelines API.

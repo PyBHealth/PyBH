@@ -3,7 +3,7 @@ import numpy as np
 import arviz as az
 from typing import Optional
 import matplotlib.pyplot as plt
-from SurvivalAnalysis.pymc_models import PyMCModel
+from .pymc_models import PyMCModel
 
 class SurvivalAnalysis:
     """
@@ -33,7 +33,13 @@ class SurvivalAnalysis:
         
         # Détection automatique du type de modèle
         self.is_bayesian = isinstance(model, PyMCModel)
-        self.is_lifelines = hasattr(model, "print_summary")
+        # Check if it's a lifelines model by checking the module name or common methods
+        model_module = type(model).__module__
+        self.is_lifelines = (
+            'lifelines' in model_module or 
+            hasattr(model, "print_summary") or
+            (hasattr(model, "fit") and hasattr(model, "predict"))
+        )
 
         # 1. Validation (Using your existing method)
         self.validate_inputs(data, time_col, event_col)
@@ -73,11 +79,16 @@ class SurvivalAnalysis:
             self.idata = self.model.idata
 
         # --- CASE B: LIFELINES (Standard Survival Analysis) ---
-        elif hasattr(self.model, "print_summary"): 
+        elif self.is_lifelines: 
             print("   -> Mode: Frequentist (Lifelines)")
             
-            # Lifelines is user-friendly and accepts the DataFrame directly
-            self.model.fit(df_clean, duration_col=time_col, event_col=event_col, **kwargs)
+            # Lifelines models use durations and event_observed parameters
+            # Extract the time and event columns as arrays
+            durations = df_clean[time_col].values
+            event_observed = df_clean[event_col].values
+            
+            # Call lifelines fit method with the correct signature
+            self.model.fit(durations=durations, event_observed=event_observed, **kwargs)
 
         else:
             raise NotImplementedError("Unknown model type. Could not determine how to fit.")
