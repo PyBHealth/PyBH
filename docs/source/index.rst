@@ -22,3 +22,4 @@ documentation for details.
    :caption: Notebooks
 
    notebooks/linear_regression
+   notebooks/kaplan_meier
