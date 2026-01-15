@@ -79,7 +79,7 @@ class BayesianSurvivalModel(ABC):
         """
         pass
 
-class BayesianPiecewiseCoxPH(BayesianSurvivalModel):
+class Cox(BayesianSurvivalModel):
     """
     Bayesian Piecewise Constant Cox Proportional Hazards Model.
     """
@@ -100,7 +100,7 @@ class BayesianPiecewiseCoxPH(BayesianSurvivalModel):
         self._feature_names = None
 
 
-    def build_model(self, interval_indices, exposures, events, X):
+    def build_model(self, interval_indices, exposures, events, X, coords):
         """
         Define the PyMC model structure using the pre-processed arrays.
             
@@ -112,13 +112,6 @@ class BayesianPiecewiseCoxPH(BayesianSurvivalModel):
         """
         n_intervals = len(self.interval_bounds_) - 1
         
-        # Coordinates for PyMC dimensions
-        coords = {
-            "coeffs": self._feature_names,
-            "intervals": np.arange(n_intervals),
-            "obs_id": np.arange(len(events)) 
-        }
-
         with pm.Model(coords=coords) as model:
             # --- Priors ---
             # Regression coefficients (beta): Normal prior
