@@ -4,7 +4,8 @@ import arviz as az
 from typing import Optional
 import matplotlib.pyplot as plt
 from SurvivalAnalysis.pymc_models import PyMCModel
-class BayesianSurvivalWorkflow:
+
+class SurvivalAnalysis:
     """
     Workflow Manager.
     
@@ -15,59 +16,7 @@ class BayesianSurvivalWorkflow:
     4. MCMC Sampling
     5. Diagnostics & Plotting
     """
-    def __init__(self, model: any):
-        self.model = model
-        self.idata = None # Pour stocker les résultats Bayésiens
-        
-        # Détection automatique du type de modèle
-        self.is_bayesian = isinstance(model, PyMCModel)
-        self.is_lifelines = hasattr(model, "print_summary")
-        self.is_sklearn = hasattr(model, "fit") and hasattr(model, "predict") and not self.is_bayesian and not self.is_lifelines
-
-    def validate_inputs(self, data: pd.DataFrame, time_col: str, event_col: str):
-        """
-        Validates data integrity before processing.
-        
-        """
-        # 1. Check if DataFrame is empty
-        if data.empty:
-            raise ValueError("The input dataset is empty.")
-
-        # 2. Check column existence
-        if time_col not in data.columns or event_col not in data.columns:
-            raise ValueError(f"Columns '{time_col}' or '{event_col}' not found in dataset.")
-
-        # 3. Type Validation (Numeric or Date)
-        is_numeric = np.issubdtype(data[time_col].dtype, np.number)
-        is_datetime = pd.api.types.is_datetime64_any_dtype(data[time_col])
-
-        if not is_numeric and not is_datetime:
-            raise TypeError(f"Column '{time_col}' must be numeric or datetime format.")
-            
-        # 4. Check if there is at least one event (otherwise survival analysis is useless)
-        if data[event_col].sum() == 0:
-            print("Warning: No events observed in the dataset. Convergence might fail.")
-
-
-    def _preprocess_data(self, data: pd.DataFrame, time_col: str, event_col: str) -> pd.DataFrame:
-        """
-        Cleans data (handles missing values).
-        """
-        df = data.copy()
-        
-        # Basic strategy: drop rows with missing values
-        df = df.dropna(subset=[time_col, event_col])
-        
-        # One-Hot Encoding (Sexe -> Sexe_M, Sexe_F)
-        df = pd.get_dummies(df, drop_first=True)
-            
-        # Booleans in int (False/True -> 0/1)
-        cols_bool = df.select_dtypes(include=['bool']).columns
-        df[cols_bool] = df[cols_bool].astype(int)
-            
-        return df
-
-    def fit(self, data: pd.DataFrame, time_col: str, event_col: str, **kwargs):
+    def __init__(self, model: any, data: pd.DataFrame, time_col: str, event_col: str, **kwargs):
         """
         Orchestrates the training process.
         Acts as an adapter that prepares data specifically for the underlying model type.
@@ -78,7 +27,13 @@ class BayesianSurvivalWorkflow:
             event_col (str): Name of the column containing event occurrence (0/1).
             **kwargs: Additional arguments passed to the underlying model's fit method.
         """
-        print(f"Starting workflow for model: {type(self.model).__name__}")
+                
+        self.model = model
+        self.idata = None # Pour stocker les résultats Bayésiens
+        
+        # Détection automatique du type de modèle
+        self.is_bayesian = isinstance(model, PyMCModel)
+        self.is_lifelines = hasattr(model, "print_summary")
 
         # 1. Validation (Using your existing method)
         self.validate_inputs(data, time_col, event_col)
@@ -124,21 +79,51 @@ class BayesianSurvivalWorkflow:
             # Lifelines is user-friendly and accepts the DataFrame directly
             self.model.fit(df_clean, duration_col=time_col, event_col=event_col, **kwargs)
 
-        # --- CASE C: SCIKIT-LEARN (OLS / Regression) ---
-        elif hasattr(self.model, "fit") and hasattr(self.model, "predict"):
-            print("   -> Mode: Scikit-Learn (Standard Regression)")
-            
-            # Sklearn expects X and y separated
-            X = df_clean.drop(columns=[time_col, event_col]).values
-            # For OLS, we typically predict the Time (ignoring censoring for simple demo)
-            y = df_clean[time_col].values 
-            
-            self.model.fit(X, y, **kwargs)
-
         else:
             raise NotImplementedError("Unknown model type. Could not determine how to fit.")
+
+    def validate_inputs(self, data: pd.DataFrame, time_col: str, event_col: str):
+        """
+        Validates data integrity before processing.
+        
+        """
+        # 1. Check if DataFrame is empty
+        if data.empty:
+            raise ValueError("The input dataset is empty.")
+
+        # 2. Check column existence
+        if time_col not in data.columns or event_col not in data.columns:
+            raise ValueError(f"Columns '{time_col}' or '{event_col}' not found in dataset.")
+
+        # 3. Type Validation (Numeric or Date)
+        is_numeric = np.issubdtype(data[time_col].dtype, np.number)
+        is_datetime = pd.api.types.is_datetime64_any_dtype(data[time_col])
+
+        if not is_numeric and not is_datetime:
+            raise TypeError(f"Column '{time_col}' must be numeric or datetime format.")
             
-        print("Training complete.")
+        # 4. Check if there is at least one event (otherwise survival analysis is useless)
+        if data[event_col].sum() == 0:
+            print("Warning: No events observed in the dataset. Convergence might fail.")
+
+
+    def _preprocess_data(self, data: pd.DataFrame, time_col: str, event_col: str) -> pd.DataFrame:
+        """
+        Cleans data (handles missing values).
+        """
+        df = data.copy()
+        
+        # Basic strategy: drop rows with missing values
+        df = df.dropna(subset=[time_col, event_col])
+        
+        # One-Hot Encoding (Sexe -> Sexe_M, Sexe_F)
+        df = pd.get_dummies(df, drop_first=True)
+            
+        # Booleans in int (False/True -> 0/1)
+        cols_bool = df.select_dtypes(include=['bool']).columns
+        df[cols_bool] = df[cols_bool].astype(int)
+            
+        return df  
 
     def check_diagnostics(self) -> None:
         """
