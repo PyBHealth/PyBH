@@ -79,7 +79,7 @@ class BayesianSurvivalModel(ABC):
         """
         pass
 
-class WeibullFitter(BayesianSurvivalModel):
+class Weibull(BayesianSurvivalModel):
     """
     Bayesian Weibull Survival Model implementation.
     Parameters: alpha (shape k), beta (scale eta).
@@ -90,7 +90,7 @@ class WeibullFitter(BayesianSurvivalModel):
         observed = data[data[event_col] == 1][duration_col].values
         censored = data[data[event_col] == 0][duration_col].values
         
-        # Smart prior for beta (scale) based on average survival time
+        # rior for beta (scale) based on average survival time
         mean_time = data[duration_col].mean()
 
         with pm.Model() as model:
@@ -144,44 +144,3 @@ class WeibullFitter(BayesianSurvivalModel):
             f"lower_{credible_interval}": hdi[0],
             f"upper_{credible_interval}": hdi[1]
         }).set_index("time")
-
-    def score(self, data, duration_col, event_col):
-        """
-        Returns a default 0.5 score as discrimination is not 
-        possible without covariates.
-        """
-        return 0.5
-
-if __name__ == "__main__":
-    # Synthetic data generation for testing
-    np.random.seed(42)
-    N = 100
-    true_alpha, true_beta = 1.5, 80.0
-    
-    # true_times represents the ACTUAL survival times generated from the distribution
-    true_times = true_beta * np.random.weibull(true_alpha, N)
-    
-    # censoring represents the end of the study or loss to follow-up
-    censoring = np.random.uniform(0, 150, N)
-    
-    # observed_times is what we actually see: the minimum of the two
-    observed_times = np.minimum(true_times, censoring)
-    
-    # events is 1 if the event was observed (true_time <= censoring), 0 otherwise
-    events = (true_times <= censoring).astype(int)
-    
-    df = pd.DataFrame({"T": observed_times, "E": events})
-    
-    # Model instance and fitting
-    wf = WeibullFitter()
-    wf.fit(df, duration_col="T", event_col="E", chains=2)
-    
-    # Results visualization
-    print(wf.summary())
-    
-    t_grid = np.linspace(0, 150, 100)
-    preds = wf.predict_survival_function(t_grid)
-    plt.plot(preds.index, preds['mean_survival'], label='Posterior Mean S(t)')
-    plt.fill_between(preds.index, preds['lower_0.95'], preds['upper_0.95'], alpha=0.3)
-    plt.title("Bayesian Weibull Survival Curve")
-    plt.show()
