@@ -113,6 +113,22 @@ class Cox(PyMCModel):
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
     """
+
+    def __init__(self, interval_length=5, priors=None):
+        super().__init__()
+        # 1. Define the piece-wise intervals
+        self.interval_length = interval_length 
+        
+        # 2. Allow custom priors for flexibility 
+        self.priors = priors if priors else {
+            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
+            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
+            "lambda_beta": 0.01       # Gamma beta for baseline hazard
+        }
+        
+        self.interval_bounds_ = None
+        self._feature_names = None
+
     def build_model(self, interval_indices, exposures, events, X, coords):
         r"""
         Parameters
@@ -175,7 +191,7 @@ class Cox(PyMCModel):
         """
         pass
 
-class Weibull(BayesianSurvivalModel):
+class Weibull(PyMCModel):
     """
     Bayesian Weibull Survival Model implementation.
     Parameters: alpha (shape k), beta (scale eta).
@@ -240,22 +256,3 @@ class Weibull(BayesianSurvivalModel):
             f"lower_{credible_interval}": hdi[0],
             f"upper_{credible_interval}": hdi[1]
         }).set_index("time")
-class Cox(BayesianSurvivalModel):
-    """
-    Bayesian Piecewise Constant Cox Proportional Hazards Model.
-    """
-
-    def __init__(self, interval_length=5, priors=None):
-        super().__init__()
-        # 1. Define the piece-wise intervals
-        self.interval_length = interval_length 
-        
-        # 2. Allow custom priors for flexibility 
-        self.priors = priors if priors else {
-            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
-            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
-            "lambda_beta": 0.01       # Gamma beta for baseline hazard
-        }
-        
-        self.interval_bounds_ = None
-        self._feature_names = None
