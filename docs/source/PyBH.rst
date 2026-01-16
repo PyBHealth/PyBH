@@ -10,17 +10,6 @@ Subpackages
    PyBH.SurvivalAnalysis
    PyBH.utils
 
-Submodules
-----------
-
-PyBH.pymc_models module
-------------------------
-
-.. automodule:: PyBH.pymc_models
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Module contents
 ---------------
 
