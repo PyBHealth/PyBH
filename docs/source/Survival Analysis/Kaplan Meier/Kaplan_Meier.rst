@@ -7,4 +7,4 @@ Cette section contient des exemples pratiques d'utilisation de PyBH pour l'analy
    :maxdepth: 1
    :caption: Notebooks:
 
-   docs\source\tutorials\kaplan_meier.ipynb
+   kaplan_meier.ipynb
