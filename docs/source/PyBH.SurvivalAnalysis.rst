@@ -1,6 +1,14 @@
 PyBH.SurvivalAnalysis package
 =============================
 
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   PyBH.SurvivalAnalysis.pymc_models
+
 Module contents
 ---------------
 
