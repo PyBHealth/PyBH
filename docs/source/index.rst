@@ -21,5 +21,4 @@ documentation for details.
    :maxdepth: 2
    :caption: Notebooks
 
-   notebooks/linear_regression
    notebooks/kaplan_meier

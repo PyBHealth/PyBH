@@ -18,14 +18,14 @@ class PyMCModel(ABC):
         self.event_col = None
 
     @abstractmethod
-    def build_model(self, data, duration_col, event_col):
+    def build_model(self, data, duration_col, event_col, coords):
         """
         Define the PyMC model structure (Priors and Likelihood).
         Must return a pm.Model() object.
         """
         pass
 
-    def fit(self, data, duration_col, event_col, draws=2000, tune=1000, chains=4, **kwargs):
+    def fit(self, data, duration_col, event_col, coords, draws=2000, tune=1000, chains=4, **kwargs):
         """
         Fit the model to the data using MCMC sampling.
         """
@@ -34,7 +34,7 @@ class PyMCModel(ABC):
         self.last_data = data
         
         # 1. Initialize the PyMC model
-        self.model = self.build_model(data, duration_col, event_col)
+        self.model = self.build_model(data, duration_col, event_col, coords)
         
         # 2. Run the MCMC sampler
         with self.model:
@@ -79,9 +79,39 @@ class PyMCModel(ABC):
         """
         pass
 
-class Cox(BayesianSurvivalModel):
-    """
-    Bayesian Piecewise Constant Cox Proportional Hazards Model.
+class Cox(PyMCModel):
+    r"""
+    Define the PyMC model structure using a Piece-wise Exponential Model (PEM).
+        
+    This implementation exploits the mathematical equivalence between the Cox 
+    Proportional Hazards model and a Poisson regression. 
+
+    **Mathematical Equivalence:**
+    
+    The hazard rate for individual :math:`i` in time interval :math:`j` is:
+    
+    .. math::
+        \lambda_{ij} = \lambda_j \exp(X_i \beta)
+        
+    where :math:`\lambda_j` is the baseline hazard for interval :math:`j`. 
+    In a survival model, the log-likelihood contribution of an observation 
+    is given by:
+    
+    .. math::
+        \log L_{ij} = d_{ij} \log(\lambda_{ij}) - \int_{t \in I_j} \lambda_{ij} dt
+        
+    Under the assumption that :math:`\lambda_j` is constant over the interval 
+    duration :math:`\Delta t_{ij}`, the integral simplifies to:
+    
+    .. math::
+        \log L_{ij} = d_{ij} (\log(\Delta t_{ij}) + \log(\lambda_j) + X_i \beta) - (\Delta t_{ij} \lambda_j e^{X_i \beta})
+        
+    This is identical (up to a constant :math:`\log(\Delta t_{ij})`) to the 
+    log-likelihood of a Poisson distribution :math:`\text{Poisson}(\mu_{ij})` 
+    where:
+    
+    .. math::
+        \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
     """
 
     def __init__(self, interval_length=5, priors=None):
@@ -101,14 +131,25 @@ class Cox(BayesianSurvivalModel):
 
 
     def build_model(self, interval_indices, exposures, events, X, coords):
-        """
-        Define the PyMC model structure using the pre-processed arrays.
-            
-        Parameters:
-        - interval_indices: Array of interval IDs for each observation row
-        - exposures: Time duration spent in the interval (Delta t)
-        - events: Event indicator (1 if event occurred in this interval, 0 otherwise)
-        - X: Covariate matrix (numpy array)
+        r"""
+        Parameters
+        ----------
+        interval_indices : array-like
+            Integer indices mapping each observation to its respective time interval.
+        exposures : array-like
+            The duration :math:`\Delta t_{ij}` spent by the individual in the interval 
+            (Time at Risk).
+        events : array-like
+            Binary indicator :math:`d_{ij}` (1 if the event occurred, 0 otherwise).
+        X : ndarray
+            Matrix of covariates (features).
+        coords : dict
+            PyMC coordinates for dimension naming (e.g., {"coeffs": ..., "intervals": ...}).
+
+        Returns
+        -------
+        model : pm.Model
+            The compiled PyMC model object.
         """
         n_intervals = len(self.interval_bounds_) - 1
         
@@ -119,10 +160,13 @@ class Cox(BayesianSurvivalModel):
             
             # Baseline hazard (lambda_0): Gamma prior 
             # We use independent priors for each interval
-            lambda_baseline = pm.Gamma("lambda0", alpha=0.01, beta=0.01, dims="intervals")
+            lambda0 = pm.Gamma("lambda0", 
+                                alpha=self.priors["lambda_alpha"], 
+                                beta=self.priors["lambda_beta"], 
+                                dims="intervals")
             
             # Map the baseline hazard to the specific intervals for each observation
-            lambda_i = lambda_baseline[interval_indices]
+            lambda_i = lambda0[interval_indices]
             
             # --- Poisson Means Calculation ---
             # The mean of the Poisson process for a specific interval is:
@@ -140,3 +184,10 @@ class Cox(BayesianSurvivalModel):
             pm.Poisson("likelihood", mu=mu, observed=events)
             
         return model
+    
+    def predict_survival_function(self, times):
+        """
+        Calculate the survival probability S(t) for given time points.
+        Returns a posterior distribution of survival curves.
+        """
+        pass
