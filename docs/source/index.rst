@@ -21,4 +21,6 @@ documentation for details.
    :maxdepth: 2
    :caption: Notebooks
 
-   notebooks/kaplan_meier
+   Survival Analysis/Cox/Cox
+   Survival Analysis/Kaplan Meier/kaplan_meier
+   Survival Analysis/Weibull/Weibull
