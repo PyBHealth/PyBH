@@ -18,14 +18,14 @@ class BayesianSurvivalModel(ABC):
         self.event_col = None
 
     @abstractmethod
-    def build_model(self, data, duration_col, event_col):
+    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         """
         Define the PyMC model structure (Priors and Likelihood).
         Must return a pm.Model() object.
         """
         pass
 
-    def fit(self, data, duration_col, event_col, draws=2000, tune=1000, chains=4, **kwargs):
+    def fit(self, data, duration_col, event_col, draws=2000, tune=1000, chains=4, coords=None, **kwargs):
         """
         Fit the model to the data using MCMC sampling.
         """
@@ -34,7 +34,7 @@ class BayesianSurvivalModel(ABC):
         self.last_data = data
         
         # 1. Initialize the PyMC model
-        self.model = self.build_model(data, duration_col, event_col)
+        self.model = self.build_model(data, duration_col, event_col, coords=coords)
         
         # 2. Run the MCMC sampler
         with self.model:
@@ -85,12 +85,12 @@ class Weibull(BayesianSurvivalModel):
     Parameters: alpha (shape k), beta (scale eta).
     """
 
-    def build_model(self, data, duration_col, event_col, coords):
+    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         # Data split: Censored (0) vs Observed (1)
         observed = data[data[event_col] == 1][duration_col].values
         censored = data[data[event_col] == 0][duration_col].values
         
-        # rior for beta (scale) based on average survival time
+        # Prior for beta (scale) based on average survival time
         mean_time = data[duration_col].mean()
 
         with pm.Model(coords=coords) as model:
