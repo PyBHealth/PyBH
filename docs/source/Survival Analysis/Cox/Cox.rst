@@ -1,10 +1,10 @@
-Cox Proportional Hazards Model
+Bayesian Cox Proportional Hazards Model
 -------------------------------
 
 .. autoclass:: PyBH.SurvivalAnalysis.pymc_models.Cox
    :members:
-   :show-inheritance:
    :special-members: predict_survival_function
+   :exclude-members: build_model
    
    The Cox model uses a piecewise constant baseline hazard and exploits the mathematical 
    equivalence between the Cox Proportional Hazards model and Poisson regression.
