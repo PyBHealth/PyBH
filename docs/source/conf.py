@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 
 autodoc_mock_imports = [
     "arviz",
+    "lifelines",
     "matplotlib",
     "numpy",
     "pandas",
