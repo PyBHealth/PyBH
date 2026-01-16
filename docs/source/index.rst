@@ -12,14 +12,8 @@ documentation for details.
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   PyBH
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Notebooks
+   :maxdepth: 1
+   :caption: Survival Analysis
 
    Survival Analysis/Cox/Cox
    Survival Analysis/Kaplan Meier/kaplan_meier
