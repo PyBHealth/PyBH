@@ -18,7 +18,7 @@ class PyMCModel(ABC):
         self.event_col = None
 
     @abstractmethod
-    def build_model(self, data, duration_col, event_col, coords):
+    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         """
         Define the PyMC model structure (Priors and Likelihood).
         Must return a pm.Model() object.
@@ -34,7 +34,7 @@ class PyMCModel(ABC):
         self.last_data = data
         
         # 1. Initialize the PyMC model
-        self.model = self.build_model(data, duration_col, event_col, coords)
+        self.model = self.build_model(data, duration_col, event_col, coords=coords)
         
         # 2. Run the MCMC sampler
         with self.model:
@@ -113,23 +113,6 @@ class Cox(PyMCModel):
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
     """
-
-    def __init__(self, interval_length=5, priors=None):
-        super().__init__()
-        # 1. Define the piece-wise intervals
-        self.interval_length = interval_length 
-        
-        # 2. Allow custom priors for flexibility 
-        self.priors = priors if priors else {
-            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
-            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
-            "lambda_beta": 0.01       # Gamma beta for baseline hazard
-        }
-        
-        self.interval_bounds_ = None
-        self._feature_names = None
-
-
     def build_model(self, interval_indices, exposures, events, X, coords):
         r"""
         Parameters
@@ -191,3 +174,88 @@ class Cox(PyMCModel):
         Returns a posterior distribution of survival curves.
         """
         pass
+
+class Weibull(BayesianSurvivalModel):
+    """
+    Bayesian Weibull Survival Model implementation.
+    Parameters: alpha (shape k), beta (scale eta).
+    """
+
+    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
+        # Data split: Censored (0) vs Observed (1)
+        observed = data[data[event_col] == 1][duration_col].values
+        censored = data[data[event_col] == 0][duration_col].values
+        
+        # Prior for beta (scale) based on average survival time
+        mean_time = data[duration_col].mean()
+
+        with pm.Model(coords=coords) as model:
+            # --- Priors ---
+            # alpha (k): shape parameter. Controls if risk is increasing (>1) or decreasing (<1)
+            alpha = pm.HalfNormal("alpha", sigma=2.0) 
+            # beta (eta): scale parameter. Characteristic time of failure.
+            beta = pm.HalfNormal("beta", sigma=mean_time * 5)
+            
+            # --- Likelihood ---
+            # 1. Observed events: PDF f(t)
+            if len(observed) > 0:
+                pm.Weibull("obs_likelihood", alpha=alpha, beta=beta, observed=observed)
+            
+            # 2. Censored events: Survival function S(t)
+            # Log(S(t)) = -(t/beta)^alpha
+            if len(censored) > 0:
+                log_surv_censored = - (censored / beta)**alpha
+                pm.Potential("cens_likelihood", log_surv_censored)
+                
+        return model
+
+    def predict_survival_function(self, times, credible_interval=0.95):
+        """
+        Predict S(t) = exp(-(t/beta)^alpha).
+        Returns a DataFrame with mean survival and uncertainty bounds.
+        """
+        if self.idata is None:
+            raise ValueError("Fit the model first.")
+            
+        # Extract posterior draws
+        stacked = self.idata.posterior.stack(sample=("chain", "draw"))
+        alpha_samples = stacked["alpha"].values
+        beta_samples = stacked["beta"].values
+        
+        times = np.atleast_1d(times)
+            
+        # Compute survival curves: S(t) = exp(-(t/beta)^alpha)
+        # Result shape: (num_samples, num_time_points)
+        surv_curves = np.exp(- (times[np.newaxis, :] / beta_samples[:, np.newaxis]) ** alpha_samples[:, np.newaxis])
+        
+        # Statistics
+        mean_surv = np.mean(surv_curves, axis=0)
+        lower_bound = (1 - credible_interval) / 2
+        upper_bound = 1 - lower_bound
+        hdi = np.quantile(surv_curves, [lower_bound, upper_bound], axis=0)
+        
+        return pd.DataFrame({
+            "time": times,
+            "mean_survival": mean_surv,
+            f"lower_{credible_interval}": hdi[0],
+            f"upper_{credible_interval}": hdi[1]
+        }).set_index("time")
+class Cox(BayesianSurvivalModel):
+    """
+    Bayesian Piecewise Constant Cox Proportional Hazards Model.
+    """
+
+    def __init__(self, interval_length=5, priors=None):
+        super().__init__()
+        # 1. Define the piece-wise intervals
+        self.interval_length = interval_length 
+        
+        # 2. Allow custom priors for flexibility 
+        self.priors = priors if priors else {
+            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
+            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
+            "lambda_beta": 0.01       # Gamma beta for baseline hazard
+        }
+        
+        self.interval_bounds_ = None
+        self._feature_names = None
