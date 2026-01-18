@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 import arviz as az
-from typing import Optional
+
 import matplotlib.pyplot as plt
-from SurvivalAnalysis.pymc_models import PyMCModel
+from pymc_models import PyMCModel
 
 class SurvivalAnalysis:
     """
@@ -29,36 +29,31 @@ class SurvivalAnalysis:
         """
                 
         self.model = model
-        self.idata = None # Pour stocker les résultats Bayésiens
+        self.idata = None  # Stores InferenceData (Bayesian models only)
         
-        # Détection automatique du type de modèle
+        # Automatically detect model type
         self.is_bayesian = isinstance(model, PyMCModel)
-        self.is_lifelines = hasattr(model, "print_summary")
+        # Check if it's a lifelines model by inspecting module name or public API
+        model_module = type(model).__module__
+        self.is_lifelines = (
+            'lifelines' in model_module or
+            hasattr(model, "print_summary") or
+            (hasattr(model, "fit") and hasattr(model, "predict"))
+        )
 
-        # 1. Validation (Using your existing method)
         self.validate_inputs(data, time_col, event_col)
-        
-        # 2. Preprocessing (Using your existing method)
-        # Note: ensuring _preprocess_data handles One-Hot Encoding is crucial here
         df_clean = self._preprocess_data(data, time_col, event_col)
         
-        # 3. Routing Logic (The Adapter Pattern)
-        
-        # --- CASE A: BAYESIAN MODELS  ---
+        # --- Model Dispatch Logic ---
         if self.is_bayesian:
             print("   -> Mode: Bayesian (PyMC)")
             
-            # PyMC models from base_model.py require strictly typed inputs:
+            # PyMC models require strictly typed NumPy inputs:
             # - X: Covariates matrix (Numpy)
-            # - y: Target matrix (Numpy)
             # - coords: Dictionary for dimension names
             
             # Prepare X (Covariates): Drop time and event columns
             X_df = df_clean.drop(columns=[time_col, event_col])
-            X_matrix = X_df.values  # Convert to pure Numpy array
-            
-            # Prepare y (Target): Usually [Time, Event] for survival
-            y_matrix = df_clean[[time_col, event_col]].values
             
             # Prepare Coords: Mapping names to dimensions for ArviZ/Xarray
             coords = {
@@ -66,18 +61,22 @@ class SurvivalAnalysis:
                 "treated_units": df_clean.index.tolist()
             }
             
-            # Call the Base Model's fit method with the prepared ingredients
-            self.model.fit(X_matrix, y_matrix, coords=coords, **kwargs)
+            # Delegate fitting to the underlying Bayesian model
+            self.model.fit(df_clean, time_col, event_col, coords=coords, **kwargs)
             
             # Store results locally for the workflow manager
             self.idata = self.model.idata
 
-        # --- CASE B: LIFELINES (Standard Survival Analysis) ---
-        elif hasattr(self.model, "print_summary"): 
+        elif self.is_lifelines:
             print("   -> Mode: Frequentist (Lifelines)")
             
-            # Lifelines is user-friendly and accepts the DataFrame directly
-            self.model.fit(df_clean, duration_col=time_col, event_col=event_col, **kwargs)
+            # Lifelines models require arrays for durations and event observation
+            # Extract the time and event columns as arrays
+            durations = df_clean[time_col].values
+            event_observed = df_clean[event_col].values
+            
+            # Delegate fitting to the underlying Lifelines model
+            self.model.fit(durations=durations, event_observed=event_observed, **kwargs)
 
         else:
             raise NotImplementedError("Unknown model type. Could not determine how to fit.")
@@ -85,7 +84,6 @@ class SurvivalAnalysis:
     def validate_inputs(self, data: pd.DataFrame, time_col: str, event_col: str):
         """
         Validates data integrity before processing.
-        
         """
         # 1. Check if DataFrame is empty
         if data.empty:
@@ -102,7 +100,7 @@ class SurvivalAnalysis:
         if not is_numeric and not is_datetime:
             raise TypeError(f"Column '{time_col}' must be numeric or datetime format.")
             
-        # 4. Check if there is at least one event (otherwise survival analysis is useless)
+        # 4. Check for at least one observed event
         if data[event_col].sum() == 0:
             print("Warning: No events observed in the dataset. Convergence might fail.")
 
@@ -116,7 +114,7 @@ class SurvivalAnalysis:
         # Basic strategy: drop rows with missing values
         df = df.dropna(subset=[time_col, event_col])
         
-        # One-Hot Encoding (Sexe -> Sexe_M, Sexe_F)
+        # One-Hot Encoding (Sex -> Sex_M, Sex_F)
         df = pd.get_dummies(df, drop_first=True)
             
         # Booleans in int (False/True -> 0/1)
@@ -135,19 +133,82 @@ class SurvivalAnalysis:
         # Logic to check R-hat would go here
         print("Checking convergence statistics...")
 
-    def plot_survival_function(self, **kwargs):
+    def plot_survival_function(self, t_max=None, X_pred=None, ax=None, **kwargs):
         """
         Generates the survival curve with credible intervals.
         """
-        if self.is_lifelines:
-            if hasattr(self.model, "plot"):
-                self.model.plot()
-                plt.show()
+        # Create a new figure/axis if none is provided
+        if ax is None:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(10, 6))
+
+        if hasattr(self, 'is_lifelines') and self.is_lifelines:
+            # Delegate plotting to the model's native plot method
+            self.model.plot(ax=ax)
+            return ax
                 
-        elif self.is_bayesian:
+        elif hasattr(self, 'is_bayesian') and self.is_bayesian:
             if self.idata is None:
                 raise RuntimeError("Model has not been trained. Run .fit() first.")
             
-            print(f"Plotting Bayesian summary...")
-            az.plot_forest(self.idata, combined=True)
-            plt.show()
+            # 1. Determine maximum time horizon
+            if t_max is None:
+                t_max = self.model.last_data[self.model.duration_col].max()
+            
+            # 2. Create time axis
+            t_plot = np.linspace(0, t_max, 100)
+            
+            # 3. Compute survival predictions
+            pred_kwargs = {}
+            if X_pred is not None:
+                pred_kwargs["X_pred"] = X_pred
+                
+            surv_df = self.predict_survival_function(t_plot, **pred_kwargs)
+            
+            # 4. Visualization
+            label = kwargs.get('label', 'Bayesian Model')
+            color = kwargs.get('color', 'blue')
+            
+            # Mean curve
+            ax.plot(surv_df.index, surv_df['mean_survival'], label=label, color=color)
+            
+            # Uncertainty interval (95% HDI)
+            ax.fill_between(
+                surv_df.index,
+                surv_df['lower_0.95'],
+                surv_df['upper_0.95'],
+                color=color,
+                alpha=0.2
+            )
+            
+            ax.set_xlabel("Time")
+            ax.set_ylabel("Survival Probability")
+            ax.set_ylim(0, 1.05)
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            
+            return ax
+
+    def predict_survival_function(self, times, **kwargs):
+        """
+        Delegates prediction to the underlying model.
+        """
+        if self.is_bayesian:
+            return self.model.predict_survival_function(times, **kwargs)
+        elif self.is_lifelines:
+            # Fallback for lifelines if needed, though they usually have predict_survival_function too
+            if hasattr(self.model, "predict_survival_function"):
+                return self.model.predict_survival_function(times, **kwargs)
+            else:
+                 raise NotImplementedError("This lifelines model might not support predict_survival_function directly.")
+        else:
+            raise NotImplementedError("Prediction not implemented for this model type.")
+
+    def summary(self):
+        """
+        Returns the summary of the underlying model.
+        """
+        if self.is_bayesian:
+            return self.model.summary()
+        elif self.is_lifelines:
+            return self.model.print_summary()
