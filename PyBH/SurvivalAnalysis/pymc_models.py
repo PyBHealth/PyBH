@@ -79,7 +79,7 @@ class PyMCModel(ABC):
         """
         pass
 
-class Weibull(BayesianSurvivalModel):
+class Weibull(PyMCModel):
     """
     Bayesian Weibull Survival Model implementation.
     Parameters: alpha (shape k), beta (scale eta).
@@ -144,7 +144,8 @@ class Weibull(BayesianSurvivalModel):
             f"lower_{credible_interval}": hdi[0],
             f"upper_{credible_interval}": hdi[1]
         }).set_index("time")
-class Cox(BayesianSurvivalModel):
+    
+class Cox(PyMCModel):
     """
     Bayesian Piecewise Constant Cox Proportional Hazards Model.
     """
