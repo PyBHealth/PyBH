@@ -83,12 +83,9 @@ residuals against the covariate, we reveal the true functional form of the relat
 
 **Interpretation of the Plot**
 When you look at your scatter plot with a smoothed line, here is what the shape tells you:
-    - A Straight Line: The assumption is satisfied. You can include the covariate as it is (linear
-    form).
-    - A Clear Curve (U-shape or S-shape): The assumption is violated. A unit increase at the low
-    end of the scale doesn't have the same impact as a unit increase at the high end.
-    - Threshold effect: The plot stays flat then suddenly jumps. This suggests you should probably
-    categorize the variable (e.g., "Low" vs "High" based on a cutoff).
+    - A Straight Line: The assumption is satisfied. You can include the covariate as it is (linear form).
+    - A Clear Curve (U-shape or S-shape): The assumption is violated. A unit increase at the low end of the scale doesn't have the same impact as a unit increase at the high end.
+    - Threshold effect: The plot stays flat then suddenly jumps. This suggests you should probably categorize the variable (e.g., "Low" vs "High" based on a cutoff).
 
 .. [Cox1972] Cox, D. R. (1972). Regression Models and Life-Tables.
    Journal of the Royal Statistical Society.

@@ -33,24 +33,3 @@ Core Capabilities
   and Cox Proportional Hazards across both engines.
 * **Unified API**: Maintain a consistent coding style regardless of the
   mathematical engine running under the hood.
-
-Available Models
------------------
-
-.. toctree::
-   :maxdepth: 1
-   :titlesonly:
-   :caption: Models:
-
-   Kaplan_Meier/Kaplan_Meier
-   Cox/Cox
-   Weibull/Weibull
-
-
-.. toctree::
-   :maxdepth: 1
-   :titlesonly:
-   :caption: Metrics:
-   :hidden:
-
-   Metrics/Metrics
