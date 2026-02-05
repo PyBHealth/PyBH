@@ -1,14 +1,19 @@
 Cox Proportional Hazards
 =========================
 
+.. toctree::
+   :maxdepth: 1
+
+   Hypothesis
+
 Hypothesis
 ----------
 
 **The Cox model relies on multiple hypotheses that need to be verified for it to be valid.**
 There are multiple ways to verify each of them. While the solutions to verify these assumptions
 range from quick approximate checks to sophisticated statistical tests, none are implemented in
-this library at the moment. :doc:`Here <Hypothesis>`, you will find an extensive list of these
-hypotheses along with existing solutions to test them.
+this library at the moment.
+:doc:`Here, you will find an extensive list of thesehypotheses along with existing solutions to test them. <Hypothesis>`
 
 .. autoclass:: PyBH.SurvivalAnalysis.pymc_models.Cox
    :members:
