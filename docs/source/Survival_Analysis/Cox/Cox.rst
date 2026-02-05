@@ -3,6 +3,7 @@ Cox Proportional Hazards
 
 .. toctree::
    :maxdepth: 1
+   :titlesonly:
 
    Hypothesis
 

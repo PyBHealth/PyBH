@@ -6,5 +6,6 @@ Cette section contient des examples pratiques d'utilisation de PyBH pour l'analy
 .. toctree::
    :maxdepth: 1
    :caption: Notebooks:
+   :titlesonly:
 
    kaplan_meier.ipynb

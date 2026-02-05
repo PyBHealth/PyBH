@@ -3,6 +3,7 @@ Survival Analysis
 
 .. toctree::
    :maxdepth: 1
+   :titlesonly:
 
    Kaplan_Meier/Kaplan_Meier
    Cox/Cox
