@@ -1,15 +1,6 @@
 Survival Analysis
 =================
 
-.. toctree::
-   :maxdepth: 1
-   :titlesonly:
-   :hidden:
-   :caption: Models:
-
-   Kaplan_Meier/Kaplan_Meier
-   Cox/Cox
-
 Welcome to the Survival Analysis module of **PyBH**.
 
 While our core expertise and the heart of this library lie in **Bayesian Inference**,
@@ -43,5 +34,13 @@ Core Capabilities
 * **Unified API**: Maintain a consistent coding style regardless of the
   mathematical engine running under the hood.
 
-Available Methods
+Available Models
 -----------------
+
+.. toctree::
+   :maxdepth: 1
+   :titlesonly:
+   :caption: Models:
+
+   Kaplan_Meier/Kaplan_Meier
+   Cox/Cox

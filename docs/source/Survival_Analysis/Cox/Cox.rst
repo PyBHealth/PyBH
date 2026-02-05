@@ -15,7 +15,7 @@ Hypothesis
 There are multiple ways to verify each of them. While the solutions to verify these assumptions
 range from quick approximate checks to sophisticated statistical tests, none are implemented in
 this library at the moment.
-:doc:`Here, you will find an extensive list of thesehypotheses along with existing solutions to test them. <Hypothesis>`
+:doc:`Here, you will find an extensive list of these hypotheses along with existing solutions to test them. <Hypothesis>`
 
 .. autoclass:: PyBH.SurvivalAnalysis.pymc_models.Cox
    :members:
