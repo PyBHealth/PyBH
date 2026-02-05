@@ -36,7 +36,7 @@ class SurvivalAnalysis:
         # Check if it's a lifelines model by inspecting module name or public API
         model_module = type(model).__module__
         self.is_lifelines = (
-            'lifelines' in model_module or 
+            'lifelines' in model_module or
             hasattr(model, "print_summary") or
             (hasattr(model, "fit") and hasattr(model, "predict"))
         )
@@ -67,7 +67,7 @@ class SurvivalAnalysis:
             # Store results locally for the workflow manager
             self.idata = self.model.idata
 
-        elif self.is_lifelines: 
+        elif self.is_lifelines:
             print("   -> Mode: Frequentist (Lifelines)")
             
             # Lifelines models require arrays for durations and event observation
@@ -174,10 +174,10 @@ class SurvivalAnalysis:
             
             # Uncertainty interval (95% HDI)
             ax.fill_between(
-                surv_df.index, 
-                surv_df['lower_0.95'], 
-                surv_df['upper_0.95'], 
-                color=color, 
+                surv_df.index,
+                surv_df['lower_0.95'],
+                surv_df['upper_0.95'],
+                color=color,
                 alpha=0.2
             )
             
