@@ -3,6 +3,11 @@ Hypothesis
 
 **Here is an extensive list of hypotheses you should check on your data before using Cox's model**
 
+    - :ref:`Non-informative censoring <NIC>`
+    - :ref:`Proportional hazard assumption <PHA>`
+    - :ref:`Linearity <L>`
+
+.. _NIC:
 1 - Non-informative Censoring
 -----------------------------
 
@@ -37,6 +42,7 @@ Because we can't test it with a formula, we must guarantee it through **rigorous
     - If a patient leaves due to a reason related to the study (like side effects), the assumption is
     violated, and the results become "biased."
 
+.. _PHA:
 2 - Proportional Hazard assumption
 ----------------------------------
 
@@ -59,6 +65,7 @@ probability of violation of this assumption is high :
 b - **Scaled Schoenfeld residuals**. These are statistical tests and graphical displays which check the
 proportional hazard assumption.
 
+.. _L:
 3 - Linearity
 ^^^^^^^^^^^^^^
 

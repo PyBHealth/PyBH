@@ -17,6 +17,9 @@ range from quick approximate checks to sophisticated statistical tests, none are
 this library at the moment.
 :doc:`Here, you will find an extensive list of these hypotheses along with existing solutions to test them. <Hypothesis>`
 
+Model
+-----
+
 .. autoclass:: PyBH.SurvivalAnalysis.pymc_models.Cox
    :members:
    :special-members: predict_survival_function
