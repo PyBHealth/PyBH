@@ -38,7 +38,7 @@ Available Methods
 -----------------
 
 .. toctree::
-   :maxdepth: 0
+   :maxdepth: 1
 
    Kaplan_Meier/Kaplan_Meier
    Cox/Cox
