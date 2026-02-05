@@ -4,6 +4,8 @@ Survival Analysis
 .. toctree::
    :maxdepth: 1
    :titlesonly:
+   :hidden:
+   :caption: Models:
 
    Kaplan_Meier/Kaplan_Meier
    Cox/Cox
