@@ -40,7 +40,8 @@ Available Models
 .. toctree::
    :maxdepth: 1
    :titlesonly:
-   :caption: Metrics:
-   :hidden:
+   :caption: Models:
 
-   Metrics/Metrics
+   Kaplan_Meier/Kaplan_Meier
+   Cox/Cox
+   Weibull/Weibull
