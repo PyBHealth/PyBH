@@ -1,15 +1,18 @@
-import pymc as pm
-import arviz as az
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
+
+import arviz as az
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pymc as pm
+
 
 class PyMCModel(ABC):
     """
     Abstract Base Class for Bayesian Survival models using PyMC.
     Designed to mimic the Lifelines API.
     """
+
     def __init__(self):
         self.model = None
         self.idata = None  # Stores the InferenceData after fitting
@@ -26,27 +29,32 @@ class PyMCModel(ABC):
         """
         pass
 
-    def fit(self, data, duration_col, event_col, coords, draws=2000, tune=1000, chains=4, **kwargs):
+    def fit(
+        self,
+        data,
+        duration_col,
+        event_col,
+        coords,
+        draws=2000,
+        tune=1000,
+        chains=4,
+        **kwargs,
+    ):
         """
         Fit the model to the data using MCMC sampling.
         """
         self.duration_col = duration_col
         self.event_col = event_col
         self.last_data = data
-        
+
         # 1. Initialize the PyMC model
         self.model = self.build_model(data, duration_col, event_col, coords=coords)
-        
+
         # 2. Run the MCMC sampler
         with self.model:
-            self.idata = pm.sample(
-                draws=draws, 
-                tune=tune, 
-                chains=chains, 
-                **kwargs
-            )
+            self.idata = pm.sample(draws=draws, tune=tune, chains=chains, **kwargs)
         return self
-    
+
     @abstractmethod
     def predict_survival_function(self, times):
         """
@@ -72,7 +80,8 @@ class PyMCModel(ABC):
         az.plot_trace(self.idata)
         plt.tight_layout()
         plt.show()
-    
+
+    @abstractmethod
     def score(self, data, duration_col, event_col):
         """
         Calculates the Concordance Index (C-index).
@@ -80,37 +89,39 @@ class PyMCModel(ABC):
         """
         pass
 
+
 class Cox(PyMCModel):
     r"""
     Define the PyMC model structure using a Piece-wise Exponential Model (PEM).
-        
-    This implementation exploits the mathematical equivalence between the Cox 
-    Proportional Hazards model and a Poisson regression. 
+
+    This implementation exploits the mathematical equivalence between the Cox
+    Proportional Hazards model and a Poisson regression.
 
     **Mathematical Equivalence:**
-    
+
     The hazard rate for individual :math:`i` in time interval :math:`j` is:
-    
+
     .. math::
         \lambda_{ij} = \lambda_j \exp(X_i \beta)
-        
-    where :math:`\lambda_j` is the baseline hazard for interval :math:`j`. 
-    In a survival model, the log-likelihood contribution of an observation 
+
+    where :math:`\lambda_j` is the baseline hazard for interval :math:`j`.
+    In a survival model, the log-likelihood contribution of an observation
     is given by:
-    
+
     .. math::
         \log L_{ij} = d_{ij} \log(\lambda_{ij}) - \int_{t \in I_j} \lambda_{ij} dt
-        
-    Under the assumption that :math:`\lambda_j` is constant over the interval 
+
+    Under the assumption that :math:`\lambda_j` is constant over the interval
     duration :math:`\Delta t_{ij}`, the integral simplifies to:
-    
+
     .. math::
-        \log L_{ij} = d_{ij} (\log(\Delta t_{ij}) + \log(\lambda_j) + X_i \beta) - (\Delta t_{ij} \lambda_j e^{X_i \beta})
-        
-    This is identical (up to a constant :math:`\log(\Delta t_{ij})`) to the 
-    log-likelihood of a Poisson distribution :math:`\text{Poisson}(\mu_{ij})` 
+        \log L_{ij} = d_{ij} (\log(\Delta t_{ij}) + \log(\lambda_j) +
+        X_i \beta) - (\Delta t_{ij} \lambda_j e^{X_i \beta})
+
+    This is identical (up to a constant :math:`\log(\Delta t_{ij})`) to the
+    log-likelihood of a Poisson distribution :math:`\text{Poisson}(\mu_{ij})`
     where:
-    
+
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
     """
@@ -119,137 +130,103 @@ class Cox(PyMCModel):
         super().__init__()
         self.cutpoints = np.sort(np.unique(np.concatenate(([0], cutpoints))))
         self.interval_bounds_ = np.concatenate((self.cutpoints, [np.inf]))
-        
-        self.priors = {
-            "beta_sigma": 1.0,
-            "lambda_alpha": 0.01,
-            "lambda_beta": 0.01
-        }
-        
+
+        self.priors = {"beta_sigma": 1.0, "lambda_alpha": 0.01, "lambda_beta": 0.01}
+
         if priors:
             self.priors.update(priors)
-            
+
         self._feature_names = None
 
     def _transform_to_long_format(self, X, times, events):
         n_samples = X.shape[0]
-
-    def build_model(self, interval_indices, exposures, events, X, coords):
-        r"""
-        Parameters
-        ----------
-        interval_indices : array-like
-            Integer indices mapping each observation to its respective time interval.
-        exposures : array-like
-            The duration :math:`\Delta t_{ij}` spent by the individual in the interval 
-            (Time at Risk).
-        events : array-like
-            Binary indicator :math:`d_{ij}` (1 if the event occurred, 0 otherwise).
-        X : ndarray
-            Matrix of covariates (features).
-        coords : dict
-            PyMC coordinates for dimension naming (e.g., {"coeffs": ..., "intervals": ...}).
-
-        Returns
-        -------
-        model : pm.Model
-            The compiled PyMC model object.
-        """
         n_intervals = len(self.interval_bounds_) - 1
-        
+
         long_idx, long_exp, long_evt, long_X = [], [], [], []
-        
+
         for i in range(n_samples):
             t_obs, e_obs = times[i], events[i]
             for j in range(n_intervals):
-                t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j+1]
-                if t_obs <= t_start: break
-                
+                t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j + 1]
+                if t_obs <= t_start:
+                    break
+
                 exposure = min(t_obs, t_end) - t_start
                 is_event = 1.0 if (t_obs <= t_end and e_obs == 1) else 0.0
-                
+
                 long_idx.append(j)
                 long_exp.append(exposure)
                 long_evt.append(is_event)
                 long_X.append(X[i])
 
-        return (np.array(long_idx, dtype=int), 
-                np.array(long_exp, dtype=float), 
-                np.array(long_evt, dtype=float), 
-                np.array(long_X, dtype=float))
+        return (
+            np.array(long_idx, dtype=int),
+            np.array(long_exp, dtype=float),
+            np.array(long_evt, dtype=float),
+            np.array(long_X, dtype=float),
+        )
 
-    def fit(self, X, y, coords=None, draws=2000, tune=1000, chains=2, **kwargs):
-        times, events = y[:, 0], y[:, 1]
-        self._feature_names = coords.get("coeffs", [f"v{i}" for i in range(X.shape[1])])
-        
-        idx, exp, evt, X_long = self._transform_to_long_format(X, times, events)
-        
+    def fit(
+        self, X, time, event, coords=None, draws=2000, tune=1000, chains=2, **kwargs
+    ):
+        X_df = X.drop(columns=[time, event]).values
+        times, events = X[time].values, X[event].values
+        self._feature_names = coords.get(
+            "coeffs", [f"v{i}" for i in range(X_df.shape[1])]
+        )
+
+        idx, exp, evt, X_long = self._transform_to_long_format(X_df, times, events)
+
         model_coords = {
             "coeffs": self._feature_names,
-            "intervals": [f"Int_{i}" for i in range(len(self.interval_bounds_) - 1)]
+            "intervals": [f"Int_{i}" for i in range(len(self.interval_bounds_) - 1)],
         }
         self.model = self.build_model(idx, exp, evt, X_long, model_coords)
-        
+
         with self.model:
             # Note: cores=1 is often required on Windows to avoid BrokenPipeErrors
-            self.idata = pm.sample(draws=draws, tune=tune, chains=chains, cores=1, **kwargs)
+            self.idata = pm.sample(
+                draws=draws, tune=tune, chains=chains, cores=1, **kwargs
+            )
         return self
 
     def build_model(self, interval_indices, exposures, events, X_long, coords):
         with pm.Model(coords=coords) as model:
-            beta = pm.Normal("beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs")
-            lambda0 = pm.Gamma("lambda0", alpha=self.priors["lambda_alpha"], 
-                               beta=self.priors["lambda_beta"], dims="intervals")
-            
-            # Baseline hazard (lambda_0): Gamma prior 
-            # We use independent priors for each interval
-            lambda0 = pm.Gamma("lambda0", 
-                                alpha=self.priors["lambda_alpha"], 
-                                beta=self.priors["lambda_beta"], 
-                                dims="intervals")
-            
-            # Map the baseline hazard to the specific intervals for each observation
-            lambda_i = lambda0[interval_indices]
-            
-            # --- Poisson Means Calculation ---
-            # The mean of the Poisson process for a specific interval is:
-            # mu = exposure * lambda_0(t) * exp(x * beta)
-            
-            # Calculate the risk score: exp(X * beta)
-            risk = pm.math.exp(pm.math.dot(X, beta))
-            
-            # Calculate mu
-            mu = exposures * lambda_i * risk
-            
-            # --- Likelihood ---
-            # We use the Poisson approximation for the piece-wise exponential model
-            # observed=events matches the 'd_ij' (death indicator) from the PyMC example
-            pm.Poisson("likelihood", mu=mu, observed=events)
-            
+            beta = pm.Normal(
+                "beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs"
+            )
+            lambda0 = pm.Gamma(
+                "lambda0",
+                alpha=self.priors["lambda_alpha"],
+                beta=self.priors["lambda_beta"],
+                dims="intervals",
+            )
+
+            log_risk = (X_long * beta[None, :]).sum(axis=-1)
+            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
+
             pm.Poisson("obs", mu=mu, observed=events)
         return model
-    
-    def predict_survival_function(self, times):
-        """
-        Calculate the survival probability S(t) for given time points.
-        Returns a posterior distribution of survival curves.
-        """
-        if self.idata is None: raise ValueError("Model not fitted.")
+
+    def predict_survival_function(self, X_new, times):
+        if self.idata is None:
+            raise ValueError("Model not fitted.")
         post = self.idata.posterior
-        lambdas = post["lambda0"].stack(sample=("chain", "draw")).values.T 
-        betas = post["beta"].stack(sample=("chain", "draw")).values.T      
-        
+        lambdas = post["lambda0"].stack(sample=("chain", "draw")).values.T
+        betas = post["beta"].stack(sample=("chain", "draw")).values.T
+
         X_arr = X_new.values if hasattr(X_new, "values") else X_new
-        risk_scores = np.exp(np.dot(betas, X_arr.T)) 
-        
+        risk_scores = np.exp(np.dot(betas, X_arr.T))
+
         cum_h0 = np.zeros((betas.shape[0], len(times)))
         for t_idx, t in enumerate(times):
             for j in range(len(self.interval_bounds_) - 1):
-                t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j+1]
+                t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j + 1]
                 if t > t_start:
                     cum_h0[:, t_idx] += lambdas[:, j] * (min(t, t_end) - t_start)
 
         return np.exp(-risk_scores[:, :, np.newaxis] * cum_h0[:, np.newaxis, :])
+
 
 class Weibull(PyMCModel):
     """
@@ -261,28 +238,29 @@ class Weibull(PyMCModel):
         # Data split: Censored (0) vs Observed (1)
         observed = data[data[event_col] == 1][duration_col].values
         censored = data[data[event_col] == 0][duration_col].values
-        
+
         # Prior for beta (scale) based on average survival time
         mean_time = data[duration_col].mean()
 
         with pm.Model(coords=coords) as model:
             # --- Priors ---
-            # alpha (k): shape parameter. Controls if risk is increasing (>1) or decreasing (<1)
-            alpha = pm.HalfNormal("alpha", sigma=2.0) 
+            # alpha (k): shape parameter. Controls if risk is increasing (>1)
+            # or decreasing (<1)
+            alpha = pm.HalfNormal("alpha", sigma=2.0)
             # beta (eta): scale parameter. Characteristic time of failure.
             beta = pm.HalfNormal("beta", sigma=mean_time * 5)
-            
+
             # --- Likelihood ---
             # 1. Observed events: PDF f(t)
             if len(observed) > 0:
                 pm.Weibull("obs_likelihood", alpha=alpha, beta=beta, observed=observed)
-            
+
             # 2. Censored events: Survival function S(t)
             # Log(S(t)) = -(t/beta)^alpha
             if len(censored) > 0:
-                log_surv_censored = - (censored / beta)**alpha
+                log_surv_censored = -((censored / beta) ** alpha)
                 pm.Potential("cens_likelihood", log_surv_censored)
-                
+
         return model
 
     def predict_survival_function(self, times, credible_interval=0.95):
@@ -292,27 +270,34 @@ class Weibull(PyMCModel):
         """
         if self.idata is None:
             raise ValueError("Fit the model first.")
-            
+
         # Extract posterior draws
         stacked = self.idata.posterior.stack(sample=("chain", "draw"))
         alpha_samples = stacked["alpha"].values
         beta_samples = stacked["beta"].values
-        
+
         times = np.atleast_1d(times)
-            
+
         # Compute survival curves: S(t) = exp(-(t/beta)^alpha)
         # Result shape: (num_samples, num_time_points)
-        surv_curves = np.exp(- (times[np.newaxis, :] / beta_samples[:, np.newaxis]) ** alpha_samples[:, np.newaxis])
-        
+        surv_curves = np.exp(
+            -(
+                (times[np.newaxis, :] / beta_samples[:, np.newaxis])
+                ** alpha_samples[:, np.newaxis]
+            )
+        )
+
         # Statistics
         mean_surv = np.mean(surv_curves, axis=0)
         lower_bound = (1 - credible_interval) / 2
         upper_bound = 1 - lower_bound
         hdi = np.quantile(surv_curves, [lower_bound, upper_bound], axis=0)
-        
-        return pd.DataFrame({
-            "time": times,
-            "mean_survival": mean_surv,
-            f"lower_{credible_interval}": hdi[0],
-            f"upper_{credible_interval}": hdi[1]
-        }).set_index("time")
+
+        return pd.DataFrame(
+            {
+                "time": times,
+                "mean_survival": mean_surv,
+                f"lower_{credible_interval}": hdi[0],
+                f"upper_{credible_interval}": hdi[1],
+            }
+        ).set_index("time")
