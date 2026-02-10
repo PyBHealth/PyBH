@@ -3,7 +3,7 @@ import numpy as np
 import arviz as az
 from typing import Optional
 import matplotlib.pyplot as plt
-from SurvivalAnalysis.pymc_models import PyMCModel
+from .pymc_models import BayesianSurvivalModel as PyMCModel
 
 class SurvivalAnalysis:
     """
