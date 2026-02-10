@@ -16,6 +16,7 @@ class PyMCModel(ABC):
         self.last_data = None
         self.duration_col = None
         self.event_col = None
+        self._feature_names = None
 
     @abstractmethod
     def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
@@ -114,20 +115,24 @@ class Cox(PyMCModel):
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
     """
 
-    def __init__(self, interval_length=5, priors=None):
+    def __init__(self, cutpoints, priors=None):
         super().__init__()
-        # 1. Define the piece-wise intervals
-        self.interval_length = interval_length 
+        self.cutpoints = np.sort(np.unique(np.concatenate(([0], cutpoints))))
+        self.interval_bounds_ = np.concatenate((self.cutpoints, [np.inf]))
         
-        # 2. Allow custom priors for flexibility 
-        self.priors = priors if priors else {
-            "beta_sigma": 10.0,       # Prior std dev for regression coeffs
-            "lambda_alpha": 0.01,     # Gamma alpha for baseline hazard
-            "lambda_beta": 0.01       # Gamma beta for baseline hazard
+        self.priors = {
+            "beta_sigma": 1.0,
+            "lambda_alpha": 0.01,
+            "lambda_beta": 0.01
         }
         
-        self.interval_bounds_ = None
+        if priors:
+            self.priors.update(priors)
+            
         self._feature_names = None
+
+    def _transform_to_long_format(self, X, times, events):
+        n_samples = X.shape[0]
 
     def build_model(self, interval_indices, exposures, events, X, coords):
         r"""
@@ -152,10 +157,49 @@ class Cox(PyMCModel):
         """
         n_intervals = len(self.interval_bounds_) - 1
         
+        long_idx, long_exp, long_evt, long_X = [], [], [], []
+        
+        for i in range(n_samples):
+            t_obs, e_obs = times[i], events[i]
+            for j in range(n_intervals):
+                t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j+1]
+                if t_obs <= t_start: break
+                
+                exposure = min(t_obs, t_end) - t_start
+                is_event = 1.0 if (t_obs <= t_end and e_obs == 1) else 0.0
+                
+                long_idx.append(j)
+                long_exp.append(exposure)
+                long_evt.append(is_event)
+                long_X.append(X[i])
+
+        return (np.array(long_idx, dtype=int), 
+                np.array(long_exp, dtype=float), 
+                np.array(long_evt, dtype=float), 
+                np.array(long_X, dtype=float))
+
+    def fit(self, X, y, coords=None, draws=2000, tune=1000, chains=2, **kwargs):
+        times, events = y[:, 0], y[:, 1]
+        self._feature_names = coords.get("coeffs", [f"v{i}" for i in range(X.shape[1])])
+        
+        idx, exp, evt, X_long = self._transform_to_long_format(X, times, events)
+        
+        model_coords = {
+            "coeffs": self._feature_names,
+            "intervals": [f"Int_{i}" for i in range(len(self.interval_bounds_) - 1)]
+        }
+        self.model = self.build_model(idx, exp, evt, X_long, model_coords)
+        
+        with self.model:
+            # Note: cores=1 is often required on Windows to avoid BrokenPipeErrors
+            self.idata = pm.sample(draws=draws, tune=tune, chains=chains, cores=1, **kwargs)
+        return self
+
+    def build_model(self, interval_indices, exposures, events, X_long, coords):
         with pm.Model(coords=coords) as model:
-            # --- Priors ---
-            # Regression coefficients (beta): Normal prior
-            beta = pm.Normal("beta", mu=0, sigma=10, dims="coeffs")
+            beta = pm.Normal("beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs")
+            lambda0 = pm.Gamma("lambda0", alpha=self.priors["lambda_alpha"], 
+                               beta=self.priors["lambda_beta"], dims="intervals")
             
             # Baseline hazard (lambda_0): Gamma prior 
             # We use independent priors for each interval
@@ -182,6 +226,7 @@ class Cox(PyMCModel):
             # observed=events matches the 'd_ij' (death indicator) from the PyMC example
             pm.Poisson("likelihood", mu=mu, observed=events)
             
+            pm.Poisson("obs", mu=mu, observed=events)
         return model
     
     def predict_survival_function(self, times):
@@ -189,7 +234,22 @@ class Cox(PyMCModel):
         Calculate the survival probability S(t) for given time points.
         Returns a posterior distribution of survival curves.
         """
-        pass
+        if self.idata is None: raise ValueError("Model not fitted.")
+        post = self.idata.posterior
+        lambdas = post["lambda0"].stack(sample=("chain", "draw")).values.T 
+        betas = post["beta"].stack(sample=("chain", "draw")).values.T      
+        
+        X_arr = X_new.values if hasattr(X_new, "values") else X_new
+        risk_scores = np.exp(np.dot(betas, X_arr.T)) 
+        
+        cum_h0 = np.zeros((betas.shape[0], len(times)))
+        for t_idx, t in enumerate(times):
+            for j in range(len(self.interval_bounds_) - 1):
+                t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j+1]
+                if t > t_start:
+                    cum_h0[:, t_idx] += lambdas[:, j] * (min(t, t_end) - t_start)
+
+        return np.exp(-risk_scores[:, :, np.newaxis] * cum_h0[:, np.newaxis, :])
 
 class Weibull(PyMCModel):
     """
