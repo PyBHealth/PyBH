@@ -16,7 +16,6 @@ class PyMCModel(ABC):
     def __init__(self):
         self.model = None
         self.idata = None  # Stores the InferenceData after fitting
-        self.last_data = None
         self.duration_col = None
         self.event_col = None
         self._feature_names = None
@@ -45,7 +44,6 @@ class PyMCModel(ABC):
         """
         self.duration_col = duration_col
         self.event_col = event_col
-        self.last_data = data
 
         # 1. Initialize the PyMC model
         self.model = self.build_model(data, duration_col, event_col, coords=coords)
@@ -63,7 +61,7 @@ class PyMCModel(ABC):
         """
         pass
 
-    def summary(self):
+    def print_summary(self):
         """
         Print statistical summary of the posterior distributions.
         """
@@ -236,8 +234,8 @@ class Weibull(PyMCModel):
 
     def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         # Data split: Censored (0) vs Observed (1)
-        observed = data[data[event_col] == 1][duration_col].values
-        censored = data[data[event_col] == 0][duration_col].values
+        observed = duration_col[event_col == 1]
+        censored = duration_col[event_col == 0]
 
         # Prior for beta (scale) based on average survival time
         mean_time = data[duration_col].mean()
