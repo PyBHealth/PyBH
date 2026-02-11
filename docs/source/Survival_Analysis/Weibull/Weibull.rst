@@ -7,7 +7,7 @@ Weibull
    :hidden:
 
    Hypothesis
-   weibull_mastectomy
+   weibull_mastectomy.ipynb
 
 Hypothesis
 ----------
@@ -15,8 +15,8 @@ Hypothesis
 Example Notebook
 ----------------
 
-:doc: `You'll find here <weibull_mastectomy>` an example notebook displaying how you could use the
-Cox model using the SurviavlAnalysis class.
+:doc:`You'll find here <weibull_mastectomy.ipynb>` an example notebook displaying how you could use the
+Cox model using the SurvivalAnalysis class.
 
 Model
 -----
