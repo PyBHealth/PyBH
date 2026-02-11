@@ -7,7 +7,7 @@ Cox Proportional Hazards
    :hidden:
 
    Hypothesis
-   cox_mastectomy.ipynb
+   cox_mastectomy
 
 Hypothesis
 ----------
@@ -21,7 +21,7 @@ this library at the moment.
 Example Notebook
 ----------------
 
-:doc: `You'll find here <cox_mastectomy.ipynb>` an example notebook displaying how you could use the
+:doc:`You'll find here <cox_mastectomy>` an example notebook displaying how you could use the
 Cox model using the SurviavlAnalysis class.
 
 Model
