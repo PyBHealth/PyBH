@@ -104,7 +104,7 @@ class Cox(PyMCModel):
     Parameters
     ----------
     cutpoints : list or np.array
-    Timepoints at which we switch intervals.
+        Timepoints at which we switch intervals.
     """
 
     def __init__(self, cutpoints, priors=None):
