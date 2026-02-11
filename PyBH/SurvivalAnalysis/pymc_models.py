@@ -16,7 +16,6 @@ class PyMCModel(ABC):
     def __init__(self):
         self.model = None
         self.idata = None  # Stores the InferenceData after fitting
-        self.last_data = None
         self.duration_col = None
         self.event_col = None
         self._feature_names = None
@@ -45,7 +44,6 @@ class PyMCModel(ABC):
         """
         self.duration_col = duration_col
         self.event_col = event_col
-        self.last_data = data
 
         # 1. Initialize the PyMC model
         self.model = self.build_model(data, duration_col, event_col, coords=coords)
@@ -56,14 +54,14 @@ class PyMCModel(ABC):
         return self
 
     @abstractmethod
-    def predict_survival_function(self, times):
+    def predict_survival_function(self, times, X_new):
         """
         Calculate the survival probability S(t) for given time points.
         Returns a posterior distribution of survival curves.
         """
         pass
 
-    def summary(self):
+    def print_summary(self):
         """
         Print statistical summary of the posterior distributions.
         """
@@ -81,13 +79,12 @@ class PyMCModel(ABC):
         plt.tight_layout()
         plt.show()
 
-    @abstractmethod
     def score(self, data, duration_col, event_col):
         """
         Calculates the Concordance Index (C-index).
         Higher is better (0.5 is random, 1.0 is perfect).
         """
-        pass
+        print("Method not yet implemented.")
 
 
 class Cox(PyMCModel):
@@ -139,18 +136,30 @@ class Cox(PyMCModel):
         self._feature_names = None
 
     def _transform_to_long_format(self, X, times, events):
-        n_samples = X.shape[0]
+        """
+        Converts survival data to long format for piecewise constant hazard modeling.
+        Each subject is expanded into multiple rows, one for each time interval they
+        entered, tracking their exposure time and whether the event occurred.
+        """
+        n_samples = len(X)
         n_intervals = len(self.interval_bounds_) - 1
 
         long_idx, long_exp, long_evt, long_X = [], [], [], []
 
         for i in range(n_samples):
+            # t_obs : Time of the event for i
+            # e_obs : 0 if censored, 1 if event
             t_obs, e_obs = times[i], events[i]
+
             for j in range(n_intervals):
+                # Extract j-th interval's delimitation
                 t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j + 1]
+
+                # If event occurred before beginning of time interval, Break
                 if t_obs <= t_start:
                     break
 
+                # Time spent at risk within the interval
                 exposure = min(t_obs, t_end) - t_start
                 is_event = 1.0 if (t_obs <= t_end and e_obs == 1) else 0.0
 
@@ -169,14 +178,20 @@ class Cox(PyMCModel):
     def fit(
         self, X, time, event, coords=None, draws=2000, tune=1000, chains=2, **kwargs
     ):
-        X_df = X.drop(columns=[time, event]).values
-        times, events = X[time].values, X[event].values
+        """
+        Fits the Bayesian Piecewise Exponential Model to the provided survival data.
+        """
+        # Define feature names for the model coordinates
         self._feature_names = coords.get(
-            "coeffs", [f"v{i}" for i in range(X_df.shape[1])]
+            "coeffs",
+            [f"v{i}" for i in range(X.shape[1] if hasattr(X, "shape") else len(X[0]))],
         )
 
-        idx, exp, evt, X_long = self._transform_to_long_format(X_df, times, events)
+        # Convert from Wide (1 row/subject) to Long (N rows/subject)
+        # This is required to model the survival process as a Poisson counting process
+        idx, exp, evt, X_long = self._transform_to_long_format(X, time, event)
 
+        # Define Model Dimensions
         model_coords = {
             "coeffs": self._feature_names,
             "intervals": [f"Int_{i}" for i in range(len(self.interval_bounds_) - 1)],
@@ -184,17 +199,23 @@ class Cox(PyMCModel):
         self.model = self.build_model(idx, exp, evt, X_long, model_coords)
 
         with self.model:
-            # Note: cores=1 is often required on Windows to avoid BrokenPipeErrors
             self.idata = pm.sample(
                 draws=draws, tune=tune, chains=chains, cores=1, **kwargs
             )
+
         return self
 
     def build_model(self, interval_indices, exposures, events, X_long, coords):
+        """
+        Constructs the Bayesian Piecewise Exponential Model using PyMC.
+        """
         with pm.Model(coords=coords) as model:
+            # Priors for the regression coefficients (log-hazard ratios)
             beta = pm.Normal(
                 "beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs"
             )
+
+            # Baseline hazard for each discrete time interval
             lambda0 = pm.Gamma(
                 "lambda0",
                 alpha=self.priors["lambda_alpha"],
@@ -202,29 +223,46 @@ class Cox(PyMCModel):
                 dims="intervals",
             )
 
+            # Compute log-risk for each observation
             log_risk = (X_long * beta[None, :]).sum(axis=-1)
-            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
 
+            # Expected value for the Poisson likelihood:
+            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
             pm.Poisson("obs", mu=mu, observed=events)
+
         return model
 
-    def predict_survival_function(self, X_new, times):
+    def predict_survival_function(self, times, X_new):
+        """
+        Predicts the survival function for new samples at given time points.
+        Calculates S(t) = exp(-H(t)), where H(t) is the cumulative hazard.
+        """
         if self.idata is None:
             raise ValueError("Model not fitted.")
+
+        # Extract posterior samples for baseline hazards and coefficients
         post = self.idata.posterior
         lambdas = post["lambda0"].stack(sample=("chain", "draw")).values.T
         betas = post["beta"].stack(sample=("chain", "draw")).values.T
 
         X_arr = X_new.values if hasattr(X_new, "values") else X_new
+
+        # Calculate the relative risk scores for each posterior sample
         risk_scores = np.exp(np.dot(betas, X_arr.T))
 
+        # Compute cumulative baseline hazard by integrating the piecewise
+        # constant hazard
         cum_h0 = np.zeros((betas.shape[0], len(times)))
         for t_idx, t in enumerate(times):
             for j in range(len(self.interval_bounds_) - 1):
                 t_start, t_end = self.interval_bounds_[j], self.interval_bounds_[j + 1]
+
+                # If the target time 't' is beyond the start of this interval
                 if t > t_start:
+                    # Add hazard contribution: (rate * time_spent_in_interval)
                     cum_h0[:, t_idx] += lambdas[:, j] * (min(t, t_end) - t_start)
 
+        # Final survival probability
         return np.exp(-risk_scores[:, :, np.newaxis] * cum_h0[:, np.newaxis, :])
 
 
@@ -236,11 +274,11 @@ class Weibull(PyMCModel):
 
     def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         # Data split: Censored (0) vs Observed (1)
-        observed = data[data[event_col] == 1][duration_col].values
-        censored = data[data[event_col] == 0][duration_col].values
+        observed = duration_col[event_col == 1]
+        censored = duration_col[event_col == 0]
 
         # Prior for beta (scale) based on average survival time
-        mean_time = data[duration_col].mean()
+        mean_time = duration_col.mean()
 
         with pm.Model(coords=coords) as model:
             # --- Priors ---
@@ -263,7 +301,7 @@ class Weibull(PyMCModel):
 
         return model
 
-    def predict_survival_function(self, times, credible_interval=0.95):
+    def predict_survival_function(self, times, X_new, credible_interval=0.95):
         """
         Predict S(t) = exp(-(t/beta)^alpha).
         Returns a DataFrame with mean survival and uncertainty bounds.

@@ -7,3 +7,21 @@ Weibull
    :hidden:
 
    Hypothesis
+   weibull_mastectomy
+
+Hypothesis
+----------
+
+Example Notebook
+----------------
+
+:doc:`You'll find here <weibull_mastectomy>` an example notebook displaying how you could use the
+Weibull model using the SurvivalAnalysis class.
+
+Model
+-----
+
+.. autoclass:: PyBH.SurvivalAnalysis.pymc_models.Weibull
+   :members:
+   :special-members: predict_survival_function
+   :exclude-members: build_model
