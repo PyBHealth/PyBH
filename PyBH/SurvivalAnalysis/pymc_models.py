@@ -101,8 +101,10 @@ class Cox(PyMCModel):
     - :math:`X_i` is the covariates associated with the patient i.
     - :math:`\beta` is the factor associated with the covariates.
 
-    :param cutpoints: Timepoints at which we switch intervals.
-    :type cutpoints: list or np.array.
+    Parameters
+    ----------
+    cutpoints : list or np.array
+    Timepoints at which we switch intervals.
     """
 
     def __init__(self, cutpoints, priors=None):
