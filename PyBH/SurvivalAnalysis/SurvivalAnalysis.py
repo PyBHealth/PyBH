@@ -64,7 +64,11 @@ class SurvivalAnalysis:
 
             # Delegate fitting to the underlying Bayesian model
             self.model.fit(
-                self.X_df, self.durations, self.event_observed, coords=coords, **kwargs
+                self.X_df.values,
+                self.durations,
+                self.event_observed,
+                coords=coords,
+                **kwargs,
             )
 
             # Store results locally for the workflow manager
@@ -161,7 +165,7 @@ class SurvivalAnalysis:
             t_plot = np.linspace(0, t_max, 100)
 
             # 3. Compute survival predictions
-            surv_df = self.model.predict_survival_function(t_plot)
+            surv_df = self.model.predict_survival_function(t_plot, self.X_df)
 
             # 4. Visualization
             label = kwargs.get("label", "Bayesian Model")
