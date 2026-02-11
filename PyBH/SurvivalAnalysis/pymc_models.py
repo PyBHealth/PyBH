@@ -89,38 +89,20 @@ class PyMCModel(ABC):
 
 class Cox(PyMCModel):
     r"""
-    Define the PyMC model structure using a Piece-wise Exponential Model (PEM).
-
-    This implementation exploits the mathematical equivalence between the Cox
-    Proportional Hazards model and a Poisson regression.
-
-    **Mathematical Equivalence:**
-
-    The hazard rate for individual :math:`i` in time interval :math:`j` is:
-
-    .. math::
-        \lambda_{ij} = \lambda_j \exp(X_i \beta)
-
-    where :math:`\lambda_j` is the baseline hazard for interval :math:`j`.
-    In a survival model, the log-likelihood contribution of an observation
-    is given by:
-
-    .. math::
-        \log L_{ij} = d_{ij} \log(\lambda_{ij}) - \int_{t \in I_j} \lambda_{ij} dt
-
-    Under the assumption that :math:`\lambda_j` is constant over the interval
-    duration :math:`\Delta t_{ij}`, the integral simplifies to:
-
-    .. math::
-        \log L_{ij} = d_{ij} (\log(\Delta t_{ij}) + \log(\lambda_j) +
-        X_i \beta) - (\Delta t_{ij} \lambda_j e^{X_i \beta})
-
-    This is identical (up to a constant :math:`\log(\Delta t_{ij})`) to the
-    log-likelihood of a Poisson distribution :math:`\text{Poisson}(\mu_{ij})`
-    where:
+    This class defines the Bayesian Cox model.
 
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
+
+    where:
+
+    - :math:`\Delta t_{ij}` is the time the patient i lived in the interval j.
+    - :math:`\lambda_j` is the baseline hazard for the interval j.
+    - :math:`X_i` is the covariates associated with the patient i.
+    - :math:`\beta` is the factor associated with the covariates.
+
+    :param cutpoints: Timepoints at which we switch intervals.
+    :type cutpoints: list or np.array.
     """
 
     def __init__(self, cutpoints, priors=None):
@@ -175,6 +157,33 @@ class Cox(PyMCModel):
             np.array(long_X, dtype=float),
         )
 
+    def _build_model(self, interval_indices, exposures, events, X_long, coords):
+        """
+        Constructs the Bayesian Piecewise Exponential Model using PyMC.
+        """
+        with pm.Model(coords=coords) as model:
+            # Priors for the regression coefficients (log-hazard ratios)
+            beta = pm.Normal(
+                "beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs"
+            )
+
+            # Baseline hazard for each discrete time interval
+            lambda0 = pm.Gamma(
+                "lambda0",
+                alpha=self.priors["lambda_alpha"],
+                beta=self.priors["lambda_beta"],
+                dims="intervals",
+            )
+
+            # Compute log-risk for each observation
+            log_risk = (X_long * beta[None, :]).sum(axis=-1)
+
+            # Expected value for the Poisson likelihood:
+            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
+            pm.Poisson("obs", mu=mu, observed=events)
+
+        return model
+
     def fit(
         self, X, time, event, coords=None, draws=2000, tune=1000, chains=2, **kwargs
     ):
@@ -204,33 +213,6 @@ class Cox(PyMCModel):
             )
 
         return self
-
-    def build_model(self, interval_indices, exposures, events, X_long, coords):
-        """
-        Constructs the Bayesian Piecewise Exponential Model using PyMC.
-        """
-        with pm.Model(coords=coords) as model:
-            # Priors for the regression coefficients (log-hazard ratios)
-            beta = pm.Normal(
-                "beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs"
-            )
-
-            # Baseline hazard for each discrete time interval
-            lambda0 = pm.Gamma(
-                "lambda0",
-                alpha=self.priors["lambda_alpha"],
-                beta=self.priors["lambda_beta"],
-                dims="intervals",
-            )
-
-            # Compute log-risk for each observation
-            log_risk = (X_long * beta[None, :]).sum(axis=-1)
-
-            # Expected value for the Poisson likelihood:
-            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
-            pm.Poisson("obs", mu=mu, observed=events)
-
-        return model
 
     def predict_survival_function(self, times, X_new):
         """
