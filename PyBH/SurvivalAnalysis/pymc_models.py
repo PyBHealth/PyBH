@@ -21,7 +21,7 @@ class PyMCModel(ABC):
         self._feature_names = None
 
     @abstractmethod
-    def _build_model(self, data, duration_col, event_col, coords=None, **kwargs):
+    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         """
         Define the PyMC model structure (Priors and Likelihood).
         Must return a pm.Model() object.
@@ -190,7 +190,7 @@ class Cox(PyMCModel):
             np.array(long_X, dtype=float),
         )
 
-    def _build_model(self, interval_indices, exposures, events, X_long, coords):
+    def build_model(self, interval_indices, exposures, events, X_long, coords):
         """
         Constructs the Bayesian Piecewise Exponential Model using PyMC.
         """
@@ -238,7 +238,7 @@ class Cox(PyMCModel):
             "coeffs": self._feature_names,
             "intervals": [f"Int_{i}" for i in range(len(self.interval_bounds_) - 1)],
         }
-        self.model = self._build_model(idx, exp, evt, X_long, model_coords)
+        self.model = self.build_model(idx, exp, evt, X_long, model_coords)
 
         with self.model:
             self.idata = pm.sample(
