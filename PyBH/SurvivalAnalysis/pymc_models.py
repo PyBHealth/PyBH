@@ -89,22 +89,28 @@ class PyMCModel(ABC):
 
 class Cox(PyMCModel):
     r"""
-    This class defines the Bayesian Cox model.
+    This class defines the Bayesian Cox Proportional Hazard model using the
+    Poisson equivalence (Piecewise Exponential Model).
+
+    It models the survival process as a set of Poisson distributions where the
+    expected number of events $\mu_{ij}$ for patient $i$ in interval $j$ is:
 
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
 
     where:
 
-    - :math:`\Delta t_{ij}` is the time the patient i lived in the interval j.
-    - :math:`\lambda_j` is the baseline hazard for the interval j.
-    - :math:`X_i` is the covariates associated with the patient i.
-    - :math:`\beta` is the factor associated with the covariates.
+    - :math:`\Delta t_{ij}` is the time (exposure) patient $i$ spent in interval $j$.
+    - :math:`\lambda_j` is the baseline hazard for the interval $j$.
+    - :math:`X_i` is the vector of covariates for patient $i$.
+    - :math:`\beta` is the vector of coefficients (log-hazard ratios) associated
+    with the covariates.
 
     Parameters
     ----------
     cutpoints : list or np.array
-        Timepoints at which we switch intervals.
+        Ordered timepoints defining the intervals for the piecewise constant
+        baseline hazard.
     """
 
     def __init__(self, cutpoints, priors=None):
