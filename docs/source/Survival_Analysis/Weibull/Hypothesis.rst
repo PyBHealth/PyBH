@@ -109,5 +109,6 @@ follow a standard Exponential distribution with a mean of 1.
 |
 |
     | *Signé :*
-    | **Jean Van Dyk**
+    | **Diebolt Jordan**
+    | **jordan.diebolt@imt-atlantique.net**
     | *Etudiant IMT Atlantique*
