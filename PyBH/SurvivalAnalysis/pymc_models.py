@@ -100,9 +100,9 @@ class Cox(PyMCModel):
 
     where:
 
-    - :math:`\Delta t_{ij}` is the time (exposure) patient $i$ spent in interval $j$.
-    - :math:`\lambda_j` is the baseline hazard for the interval $j$.
-    - :math:`X_i` is the vector of covariates for patient $i$.
+    - :math:`\Delta t_{ij}` is the time (exposure) patient i spent in interval j.
+    - :math:`\lambda_j` is the baseline hazard for the interval j.
+    - :math:`X_i` is the vector of covariates for patient i.
     - :math:`\beta` is the vector of coefficients (log-hazard ratios) associated
     with the covariates.
 
@@ -114,15 +114,25 @@ class Cox(PyMCModel):
 
     Examples
     --------
-    >>> import pymc as pm
-    >>> import pandas as pd
-    >>> from SurvivalAnalysis import SurvivalAnalysis
-    >>> from pymc_models import Cox
-    >>> data = pd.read_csv(pm.get_data("mastectomy.csv"))
-    >>> # Define intervals: 0-10, 10-20, 20+
-    >>> model = Cox(cutpoints=[10, 20])
-    >>> analysis = SurvivalAnalysis(model=model, data=data)
-    >>> analysis.plot_survival_function()
+    .. plot::
+        :include-source:
+
+        import pymc as pm
+        import pandas as pd
+        from SurvivalAnalysis import SurvivalAnalysis
+        from pymc_models import Cox
+
+        # Typical dataset for survival analysis
+        data = pd.read_csv(pm.get_data("mastectomy.csv"))
+
+        # Define intervals: 0-10, 10-20, 20+
+        model = Cox(cutpoints=[10, 20])
+
+        # Launch analysis
+        analysis = SurvivalAnalysis(model=model, data=data)
+
+        # Plot obtained survival function
+        analysis.plot_survival_function()
     """
 
     def __init__(self, cutpoints, priors=None):

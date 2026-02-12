@@ -28,7 +28,7 @@ Model
 -----
 
 .. autoclass:: PyBH.SurvivalAnalysis.pymc_models.Cox
-   :members:
+   :no-members:
    :special-members: predict_survival_function
    :exclude-members: build_model
 
