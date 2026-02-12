@@ -129,7 +129,10 @@ class Cox(PyMCModel):
         model = Cox(cutpoints=[10, 20])
 
         # Launch analysis
-        analysis = SurvivalAnalysis(model=model, data=data)
+        analysis = SurvivalAnalysis(model=model,
+                                    data=data,
+                                    time_col="time",
+                                    event_col="event",)
 
         # Plot obtained survival function
         analysis.plot_survival_function()
