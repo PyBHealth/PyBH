@@ -21,7 +21,7 @@ class PyMCModel(ABC):
         self._feature_names = None
 
     @abstractmethod
-    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
+    def _build_model(self, data, duration_col, event_col, coords=None, **kwargs):
         """
         Define the PyMC model structure (Priors and Likelihood).
         Must return a pm.Model() object.
