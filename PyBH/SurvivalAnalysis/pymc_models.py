@@ -93,7 +93,7 @@ class Cox(PyMCModel):
     Poisson equivalence (Piecewise Exponential Model).
 
     It models the survival process as a set of Poisson distributions where the
-    expected number of events $\mu_{ij}$ for patient $i$ in interval $j$ is:
+    expected number of events :math:`\mu_{ij}` for patient i in interval j is:
 
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
@@ -111,6 +111,18 @@ class Cox(PyMCModel):
     cutpoints : list or np.array
         Ordered timepoints defining the intervals for the piecewise constant
         baseline hazard.
+
+    Examples
+    --------
+    >>> import pymc as pm
+    >>> import pandas as pd
+    >>> from SurvivalAnalysis import SurvivalAnalysis
+    >>> from pymc_models import Cox
+    >>> data = pd.read_csv(pm.get_data("mastectomy.csv"))
+    >>> # Define intervals: 0-10, 10-20, 20+
+    >>> model = Cox(cutpoints=[10, 20])
+    >>> analysis = SurvivalAnalysis(model=model, data=data)
+    >>> analysis.plot_survival_function()
     """
 
     def __init__(self, cutpoints, priors=None):
