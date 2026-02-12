@@ -25,5 +25,15 @@ Example Notebook
 Model
 -----
 
+The Kaplan-Meier estimator is a non-parametric statistic used to estimate the survival function from lifetime data. The formula for the survival function $S(t)$ is defined as:
+
+.. math::
+
+    S(t) = \prod_{i: t_i \leq t} \left(1 - \frac{d_i}{n_i}\right)
+
+Where:
+- $d_i$ is the number of events (e.g., deaths) at time $t_i$.
+- $n_i$ is the number of subjects at risk (still alive and not censored) just before time $t_i$.
+
 .. autoclass:: lifelines.KaplanMeierFitter
    :members:
