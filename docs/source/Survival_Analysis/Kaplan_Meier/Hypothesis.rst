@@ -22,9 +22,9 @@ This means that the fact that an individual is censored should not provide infor
 How to tackle this issue
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-This hypothesis cannot be tested mathematically because we lack data after the moment of censoring. It must be guaranteed through the quality of data collection:
+**This hypothesis cannot be tested mathematically** because we lack data after the moment of censoring. As this library does not provide automated checks for this, validity must be guaranteed through the quality of data collection:
     - Precisely document the reason for each study exit.
-    - Ensure that exits are not related to a deterioration in the patient's health status.
+    - Ensure that exits are not related to a deterioration in the patient's health status (e.g., exiting because the patient is too ill to continue).
 
 .. _ISR:
 
@@ -36,7 +36,7 @@ The model assumes that survival probabilities are the same for individuals recru
 The core idea
 ^^^^^^^^^^^^^
 
-If care protocols improve significantly during the study period, a patient recruited late might have better survival than a patient recruited at the beginning, which would bias the overall estimate.
+If care protocols improve significantly during the study period, a patient recruited late might have better survival than a patient recruited at the beginning, which would bias the overall estimate. Users should audit their data for changes in treatment standards over the study duration.
 
 .. _EPT:
 
@@ -48,7 +48,7 @@ The Kaplan-Meier estimator assumes that events (death, failure, etc.) occur at s
 The core idea
 ^^^^^^^^^^^^^
 
-Although the method handles "tied" data (events occurring at the same time), it is more effective when time is measured continuously rather than in very wide intervals (such as years), which could mask the true shape of the survival curve.
+Although the method handles "tied" data (events occurring at the same time), it is **more effective when time is measured continuously**. Measuring time in very wide intervals (such as years) can mask the true shape of the survival curve and reduce the granularity of the estimator.
 
 |
 |
