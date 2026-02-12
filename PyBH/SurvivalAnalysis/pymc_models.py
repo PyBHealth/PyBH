@@ -238,7 +238,7 @@ class Cox(PyMCModel):
             "coeffs": self._feature_names,
             "intervals": [f"Int_{i}" for i in range(len(self.interval_bounds_) - 1)],
         }
-        self.model = self.build_model(idx, exp, evt, X_long, model_coords)
+        self.model = self._build_model(idx, exp, evt, X_long, model_coords)
 
         with self.model:
             self.idata = pm.sample(
