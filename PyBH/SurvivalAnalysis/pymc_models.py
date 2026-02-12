@@ -119,8 +119,8 @@ class Cox(PyMCModel):
 
         import pymc as pm
         import pandas as pd
-        from SurvivalAnalysis import SurvivalAnalysis
-        from pymc_models import Cox
+        from PyBH.SurvivalAnalysis import SurvivalAnalysis
+        from PyBH.pymc_models import Cox
 
         # Typical dataset for survival analysis
         data = pd.read_csv(pm.get_data("mastectomy.csv"))
