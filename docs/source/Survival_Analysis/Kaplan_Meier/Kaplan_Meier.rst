@@ -17,7 +17,7 @@ There are multiple ways to verify each of them. While the solutions to verify th
 
 :doc:`Here, you will find an extensive list of these hypotheses along with existing solutions to test them. <Hypothesis>`
 
-Example Notebook
+Example Notebook : Kaplan-Meier
 ----------------
 
 :doc:`You'll find here <kaplan_meier>` an example notebook displaying how you could use the Kaplan-Meier estimator using the SurvivalAnalysis class.
@@ -26,7 +26,7 @@ Model
 -----
 
 The Kaplan-Meier estimator is a non-parametric statistic used to estimate the survival function from lifetime data.
-The formula for the survival function $S(t)$ is defined as:
+The formula for the survival function :math:`S(t)` is defined as:
 
 .. math::
 
