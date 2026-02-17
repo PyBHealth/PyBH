@@ -17,10 +17,10 @@ There are multiple ways to verify each of them. While the solutions to verify th
 
 :doc:`Here, you will find an extensive list of these hypotheses along with existing solutions to test them. <Hypothesis>`
 
-Example Notebook : Kaplan-Meier
+Example Notebook
 ----------------
 
-:doc:`You'll find here <kaplan_meier>` an example notebook displaying how you could use the Kaplan-Meier estimator using the SurvivalAnalysis class.
+:doc:`You'll find here <Example Notebook : Kaplan Meier>` an example notebook displaying how you could use the Kaplan-Meier estimator using the SurvivalAnalysis class.
 
 Model
 -----
@@ -33,8 +33,8 @@ The formula for the survival function :math:`S(t)` is defined as:
     S(t) = \prod_{i: t_i \leq t} \left(1 - \frac{d_i}{n_i}\right)
 
 Where:
-- $d_i$ is the number of events (e.g., deaths) at time $t_i$.
-- $n_i$ is the number of subjects at risk (still alive and not censored) just before time $t_i$.
+- :math:`d_i` is the number of events (e.g., deaths) at time :math:`t_i`.
+- :math:`n_i` is the number of subjects at risk (still alive and not censored) just before time :math:`t_i`.
 
 .. autoclass:: lifelines.KaplanMeierFitter
    :members:
