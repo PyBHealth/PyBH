@@ -20,7 +20,7 @@ There are multiple ways to verify each of them. While the solutions to verify th
 Example Notebook
 ----------------
 
-:doc:`You'll find here <Example Notebook : Kaplan Meier>` an example notebook displaying how you could use the Kaplan-Meier estimator using the SurvivalAnalysis class.
+:doc:`You'll find here <Kaplan Meier>` an example notebook displaying how you could use the Kaplan-Meier estimator using the SurvivalAnalysis class.
 
 Model
 -----
