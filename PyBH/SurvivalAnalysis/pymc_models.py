@@ -114,16 +114,14 @@ class Cox(PyMCModel):
 
     Examples
     --------
-    .. plot::
-        :include-source:
 
-        import pymc
-        import pandas
-        from PyBH.SurvivalAnalysis.SurvivalAnalysis import SurvivalAnalysis
-        from PyBH.SurvivalAnalysis.pymc_models import Cox
+    >>> import pymc
+    >>> import pandas
+    >>> from PyBH.SurvivalAnalysis.SurvivalAnalysis import SurvivalAnalysis
+    >>> from PyBH.SurvivalAnalysis.pymc_models import Cox
 
-        # Typical dataset for survival analysis
-        data = pandas.read_csv(pymc.get_data("mastectomy.csv"))
+    >>> # Typical dataset for survival analysis
+    >>> data = pandas.read_csv(pymc.get_data("mastectomy.csv"))
 
         # Define intervals: 0-10, 10-20, 20+
         model = Cox(cutpoints=[10, 20])
