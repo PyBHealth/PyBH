@@ -103,7 +103,7 @@ class Cox(PyMCModel):
     - :math:`\Delta t_{ij}` is the time (exposure) patient i spent in interval j.
     - :math:`\lambda_j` is the baseline hazard for the interval j.
     - :math:`X_i` is the vector of covariates for patient i.
-    - :math:`\beta` is the vector of coefficients (log-hazard ratios) associated
+    - :math:`\beta` is the vector of coefficients (log-hazard ratios) associated \
     with the covariates.
 
     Parameters
