@@ -352,3 +352,193 @@ class Weibull(PyMCModel):
                 f"upper_{credible_interval}": hdi[1],
             }
         ).set_index("time")
+    
+class WeibullPH(PyMCModel):
+    r"""
+    Weibull Proportional Hazards (PH) Model.
+
+    Models the instantaneous hazard rate as:
+    .. math::
+        h(t|x) = h_0(t) \exp(x \beta)
+
+    Where the baseline hazard $h_0(t)$ follows a Weibull distribution.
+    
+    In PyMC's Weibull parameterization (alpha, beta=scale), the PH assumption 
+    implies that the scale parameter varies per individual:
+    .. math::
+        \text{scale}(x) = \text{scale}_0 \times \exp\left(-\frac{x \beta}{\alpha}\right)
+    """
+
+    def fit(self, X, duration_col, event_col, coords=None, draws=2000, tune=1000, chains=2, **kwargs):
+        """
+        Fits the Bayesian model using MCMC sampling.
+        
+        Args:
+            X (array-like): Matrix of covariates (standardized).
+            duration_col (array-like): Time to event or censorship.
+            event_col (array-like): Event indicator (1=Observed, 0=Censored).
+            coords (dict): Dimension names for ArviZ/Xarray.
+        """
+        # 1. Format inputs to NumPy arrays
+        X_arr = np.asarray(X)
+        time_arr = np.asarray(duration_col)
+        event_arr = np.asarray(event_col)
+
+        # Force X to be 2D (N, P) even if there is only one feature
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(-1, 1)
+
+        if X_arr.shape[0] != len(time_arr):
+            raise ValueError(f"Dimension mismatch: X has {X_arr.shape[0]} rows, Time has {len(time_arr)}.")
+
+        # 2. Handle Coordinates for coefficients naming
+        if coords is None:
+            coords = {}
+        
+        if "coeffs" not in coords:
+            n_features = X_arr.shape[1]
+            coords["coeffs"] = [f"v{i}" for i in range(n_features)]
+
+        # Track observation IDs for downstream diagnostics
+        coords["obs_id"] = np.where(event_arr == 1)[0]
+
+        # 3. Build and Sample
+        self.model = self.build_model(X_arr, time_arr, event_arr, coords=coords)
+        
+        with self.model:
+            self.idata = pm.sample(draws=draws, tune=tune, chains=chains, **kwargs)
+            
+        return self
+
+    def build_model(self, X, time, event, coords=None, **kwargs):
+        """
+        Defines the PyMC probabilistic graph.
+        """
+        # Split indices for observed vs censored data
+        obs_idx = np.where(event == 1)[0]
+        cens_idx = np.where(event == 0)[0]
+        
+        # Heuristic for scale prior to aid convergence
+        mean_time = np.mean(time)
+
+        with pm.Model(coords=coords) as model:
+            # --- Priors ---
+            
+            # Alpha (shape): k
+            # k > 1: Hazard increases over time
+            # k < 1: Hazard decreases over time
+            alpha = pm.HalfNormal("alpha", sigma=2.0)
+            
+            # Lambda0 (baseline scale): sigma_0
+            # Represents the scale for an "average" individual if X is centered
+            lambda0 = pm.HalfNormal("lambda0", sigma=mean_time * 2)
+
+            # Betas (log-hazard ratios)
+            # Normal(0,1) is a standard weakly informative prior for scaled data
+            betas = pm.Normal("beta", mu=0, sigma=1.0, dims="coeffs")
+
+            # --- Weibull PH Parameterization ---
+            
+            # 1. Linear Predictor: eta = X * beta
+            linear_predictor = pm.math.dot(X, betas)
+            
+            # 2. Map PH to AFT scale
+            # scale(x) = lambda0 * exp( - (X * beta) / alpha )
+            scale = lambda0 * pm.math.exp(-linear_predictor / alpha)
+
+            # --- Likelihood ---
+            
+            # A. Observed Events -> Probability Density Function (PDF)
+            if len(obs_idx) > 0:
+                pm.Weibull(
+                    "obs",
+                    alpha=alpha,
+                    beta=scale[obs_idx],
+                    observed=time[obs_idx],
+                    dims="obs_id"
+                )
+
+            # B. Censored Events -> Survival Function (CCDF)
+            # Log S(t) = - (t / scale)^alpha
+            if len(cens_idx) > 0:
+                log_surv_censored = -((time[cens_idx] / scale[cens_idx]) ** alpha)
+                pm.Potential("cens_likelihood", log_surv_censored)
+
+        return model
+
+    def predict_survival_function(self, times, X_new):
+        """
+        Calculates predicted survival curves S(t|x) for new data.
+        
+        Args:
+            times (array): Time points to evaluate survival.
+            X_new (array-like): Covariates for new subjects.
+            
+        Returns:
+            pd.DataFrame: Index = Time, Columns = Subject index.
+        """
+        if self.idata is None:
+            raise ValueError("Model must be fitted before predicting.")
+
+        X_arr = np.asarray(X_new)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(-1, 1)
+            
+        times = np.atleast_1d(times)
+
+        # Extract posterior samples and stack chains/draws
+        post = self.idata.posterior
+        alpha_s = post["alpha"].stack(sample=("chain", "draw")).values 
+        lambda0_s = post["lambda0"].stack(sample=("chain", "draw")).values 
+        beta_s = post["beta"].stack(sample=("chain", "draw")).values 
+
+        # --- Vectorized Calculation (Broadcasting) ---
+        
+        # 1. Linear Predictor for each subject and MCMC sample
+        # (n_subjects, n_features) @ (n_features, n_samples) -> (n_subjects, n_samples)
+        lp = np.dot(X_arr, beta_s)
+
+        # 2. Adjusted scale per subject/sample
+        scale_s = lambda0_s * np.exp(-lp / alpha_s)
+
+        # 3. Survival Curves S(t) = exp( - (t / scale)^alpha )
+        # Shape targeted: (n_subjects, n_times, n_samples)
+        t_br = times[np.newaxis, :, np.newaxis]
+        sc_br = scale_s[:, np.newaxis, :]
+        al_br = alpha_s[np.newaxis, np.newaxis, :]
+        
+        surv_raw = np.exp(- (t_br / sc_br) ** al_br)
+        
+        # 4. Average across MCMC samples (marginalizing uncertainty)
+        surv_mean = np.mean(surv_raw, axis=2)
+
+        # Return DataFrame with Time as index and subjects as columns
+        return pd.DataFrame(surv_mean.T, index=times)
+
+    def score(self, X, duration_col, event_col):
+        """
+        Calculates the Concordance Index (C-index).
+        
+        Returns:
+            float: 0.5 (random) to 1.0 (perfect).
+        """
+        try:
+            from lifelines.utils import concordance_index
+        except ImportError:
+            raise ImportError("Package 'lifelines' is required for scoring.")
+
+        if self.idata is None:
+            raise ValueError("Model must be fitted.")
+
+        X_arr = np.asarray(X)
+        if X_arr.ndim == 1: X_arr = X_arr.reshape(-1, 1)
+
+        # 1. Get mean posterior coefficients
+        beta_mean = self.idata.posterior["beta"].mean(dim=["chain", "draw"]).values
+        
+        # 2. Calculate Risk Score
+        risk_scores = np.dot(X_arr, beta_mean)
+        
+        # 3. Calculate C-index
+        # Since High Risk = Low Survival, we use -risk_scores for the concordance index.
+        return concordance_index(duration_col, -risk_scores, event_col)
