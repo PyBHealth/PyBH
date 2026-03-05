@@ -89,38 +89,51 @@ class PyMCModel(ABC):
 
 class Cox(PyMCModel):
     r"""
-    Define the PyMC model structure using a Piece-wise Exponential Model (PEM).
+    This class defines the Bayesian Cox Proportional Hazard model using the
+    Poisson equivalence (Piecewise Exponential Model).
 
-    This implementation exploits the mathematical equivalence between the Cox
-    Proportional Hazards model and a Poisson regression.
-
-    **Mathematical Equivalence:**
-
-    The hazard rate for individual :math:`i` in time interval :math:`j` is:
-
-    .. math::
-        \lambda_{ij} = \lambda_j \exp(X_i \beta)
-
-    where :math:`\lambda_j` is the baseline hazard for interval :math:`j`.
-    In a survival model, the log-likelihood contribution of an observation
-    is given by:
-
-    .. math::
-        \log L_{ij} = d_{ij} \log(\lambda_{ij}) - \int_{t \in I_j} \lambda_{ij} dt
-
-    Under the assumption that :math:`\lambda_j` is constant over the interval
-    duration :math:`\Delta t_{ij}`, the integral simplifies to:
-
-    .. math::
-        \log L_{ij} = d_{ij} (\log(\Delta t_{ij}) + \log(\lambda_j) +
-        X_i \beta) - (\Delta t_{ij} \lambda_j e^{X_i \beta})
-
-    This is identical (up to a constant :math:`\log(\Delta t_{ij})`) to the
-    log-likelihood of a Poisson distribution :math:`\text{Poisson}(\mu_{ij})`
-    where:
+    It models the survival process as a set of Poisson distributions where the
+    expected number of events :math:`\mu_{ij}` for patient i in interval j is:
 
     .. math::
         \mu_{ij} = \Delta t_{ij} \cdot \lambda_j \cdot \exp(X_i \beta)
+
+    where:
+
+    - :math:`\Delta t_{ij}` is the time (exposure) patient i spent in interval j.
+    - :math:`\lambda_j` is the baseline hazard for the interval j.
+    - :math:`X_i` is the vector of covariates for patient i.
+    - :math:`\beta` is the vector of coefficients (log-hazard ratios) associated \
+    with the covariates.
+
+    Parameters
+    ----------
+    cutpoints : list or np.array
+        Ordered timepoints defining the intervals for the piecewise constant
+        baseline hazard.
+
+    Examples
+    --------
+
+    >>> import pymc
+    >>> import pandas
+    >>> from PyBH.SurvivalAnalysis.SurvivalAnalysis import SurvivalAnalysis
+    >>> from PyBH.SurvivalAnalysis.pymc_models import Cox
+
+    >>> # Typical dataset for survival analysis
+    >>> data = pandas.read_csv(pymc.get_data("mastectomy.csv"))
+
+        # Define intervals: 0-10, 10-20, 20+
+        model = Cox(cutpoints=[10, 20])
+
+        # Launch analysis
+        analysis = SurvivalAnalysis(model=model,
+                                    data=data,
+                                    time_col="time",
+                                    event_col="event",)
+
+        # Plot obtained survival function
+        analysis.plot_survival_function()
     """
 
     def __init__(self, cutpoints, priors=None):
@@ -175,6 +188,33 @@ class Cox(PyMCModel):
             np.array(long_X, dtype=float),
         )
 
+    def build_model(self, interval_indices, exposures, events, X_long, coords):
+        """
+        Constructs the Bayesian Piecewise Exponential Model using PyMC.
+        """
+        with pm.Model(coords=coords) as model:
+            # Priors for the regression coefficients (log-hazard ratios)
+            beta = pm.Normal(
+                "beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs"
+            )
+
+            # Baseline hazard for each discrete time interval
+            lambda0 = pm.Gamma(
+                "lambda0",
+                alpha=self.priors["lambda_alpha"],
+                beta=self.priors["lambda_beta"],
+                dims="intervals",
+            )
+
+            # Compute log-risk for each observation
+            log_risk = (X_long * beta[None, :]).sum(axis=-1)
+
+            # Expected value for the Poisson likelihood:
+            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
+            pm.Poisson("obs", mu=mu, observed=events)
+
+        return model
+
     def fit(
         self, X, time, event, coords=None, draws=2000, tune=1000, chains=2, **kwargs
     ):
@@ -204,33 +244,6 @@ class Cox(PyMCModel):
             )
 
         return self
-
-    def build_model(self, interval_indices, exposures, events, X_long, coords):
-        """
-        Constructs the Bayesian Piecewise Exponential Model using PyMC.
-        """
-        with pm.Model(coords=coords) as model:
-            # Priors for the regression coefficients (log-hazard ratios)
-            beta = pm.Normal(
-                "beta", mu=0, sigma=self.priors["beta_sigma"], dims="coeffs"
-            )
-
-            # Baseline hazard for each discrete time interval
-            lambda0 = pm.Gamma(
-                "lambda0",
-                alpha=self.priors["lambda_alpha"],
-                beta=self.priors["lambda_beta"],
-                dims="intervals",
-            )
-
-            # Compute log-risk for each observation
-            log_risk = (X_long * beta[None, :]).sum(axis=-1)
-
-            # Expected value for the Poisson likelihood:
-            mu = exposures * lambda0[interval_indices] * pm.math.exp(log_risk)
-            pm.Poisson("obs", mu=mu, observed=events)
-
-        return model
 
     def predict_survival_function(self, times, X_new):
         """
@@ -339,3 +352,193 @@ class Weibull(PyMCModel):
                 f"upper_{credible_interval}": hdi[1],
             }
         ).set_index("time")
+    
+class WeibullPH(PyMCModel):
+    r"""
+    Weibull Proportional Hazards (PH) Model.
+
+    Models the instantaneous hazard rate as:
+    .. math::
+        h(t|x) = h_0(t) \exp(x \beta)
+
+    Where the baseline hazard $h_0(t)$ follows a Weibull distribution.
+    
+    In PyMC's Weibull parameterization (alpha, beta=scale), the PH assumption 
+    implies that the scale parameter varies per individual:
+    .. math::
+        \text{scale}(x) = \text{scale}_0 \times \exp\left(-\frac{x \beta}{\alpha}\right)
+    """
+
+    def fit(self, X, duration_col, event_col, coords=None, draws=2000, tune=1000, chains=2, **kwargs):
+        """
+        Fits the Bayesian model using MCMC sampling.
+        
+        Args:
+            X (array-like): Matrix of covariates (standardized).
+            duration_col (array-like): Time to event or censorship.
+            event_col (array-like): Event indicator (1=Observed, 0=Censored).
+            coords (dict): Dimension names for ArviZ/Xarray.
+        """
+        # 1. Format inputs to NumPy arrays
+        X_arr = np.asarray(X)
+        time_arr = np.asarray(duration_col)
+        event_arr = np.asarray(event_col)
+
+        # Force X to be 2D (N, P) even if there is only one feature
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(-1, 1)
+
+        if X_arr.shape[0] != len(time_arr):
+            raise ValueError(f"Dimension mismatch: X has {X_arr.shape[0]} rows, Time has {len(time_arr)}.")
+
+        # 2. Handle Coordinates for coefficients naming
+        if coords is None:
+            coords = {}
+        
+        if "coeffs" not in coords:
+            n_features = X_arr.shape[1]
+            coords["coeffs"] = [f"v{i}" for i in range(n_features)]
+
+        # Track observation IDs for downstream diagnostics
+        coords["obs_id"] = np.where(event_arr == 1)[0]
+
+        # 3. Build and Sample
+        self.model = self.build_model(X_arr, time_arr, event_arr, coords=coords)
+        
+        with self.model:
+            self.idata = pm.sample(draws=draws, tune=tune, chains=chains, **kwargs)
+            
+        return self
+
+    def build_model(self, X, time, event, coords=None, **kwargs):
+        """
+        Defines the PyMC probabilistic graph.
+        """
+        # Split indices for observed vs censored data
+        obs_idx = np.where(event == 1)[0]
+        cens_idx = np.where(event == 0)[0]
+        
+        # Heuristic for scale prior to aid convergence
+        mean_time = np.mean(time)
+
+        with pm.Model(coords=coords) as model:
+            # --- Priors ---
+            
+            # Alpha (shape): k
+            # k > 1: Hazard increases over time
+            # k < 1: Hazard decreases over time
+            alpha = pm.HalfNormal("alpha", sigma=2.0)
+            
+            # Lambda0 (baseline scale): sigma_0
+            # Represents the scale for an "average" individual if X is centered
+            lambda0 = pm.HalfNormal("lambda0", sigma=mean_time * 2)
+
+            # Betas (log-hazard ratios)
+            # Normal(0,1) is a standard weakly informative prior for scaled data
+            betas = pm.Normal("beta", mu=0, sigma=1.0, dims="coeffs")
+
+            # --- Weibull PH Parameterization ---
+            
+            # 1. Linear Predictor: eta = X * beta
+            linear_predictor = pm.math.dot(X, betas)
+            
+            # 2. Map PH to AFT scale
+            # scale(x) = lambda0 * exp( - (X * beta) / alpha )
+            scale = lambda0 * pm.math.exp(-linear_predictor / alpha)
+
+            # --- Likelihood ---
+            
+            # A. Observed Events -> Probability Density Function (PDF)
+            if len(obs_idx) > 0:
+                pm.Weibull(
+                    "obs",
+                    alpha=alpha,
+                    beta=scale[obs_idx],
+                    observed=time[obs_idx],
+                    dims="obs_id"
+                )
+
+            # B. Censored Events -> Survival Function (CCDF)
+            # Log S(t) = - (t / scale)^alpha
+            if len(cens_idx) > 0:
+                log_surv_censored = -((time[cens_idx] / scale[cens_idx]) ** alpha)
+                pm.Potential("cens_likelihood", log_surv_censored)
+
+        return model
+
+    def predict_survival_function(self, times, X_new):
+        """
+        Calculates predicted survival curves S(t|x) for new data.
+        
+        Args:
+            times (array): Time points to evaluate survival.
+            X_new (array-like): Covariates for new subjects.
+            
+        Returns:
+            pd.DataFrame: Index = Time, Columns = Subject index.
+        """
+        if self.idata is None:
+            raise ValueError("Model must be fitted before predicting.")
+
+        X_arr = np.asarray(X_new)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(-1, 1)
+            
+        times = np.atleast_1d(times)
+
+        # Extract posterior samples and stack chains/draws
+        post = self.idata.posterior
+        alpha_s = post["alpha"].stack(sample=("chain", "draw")).values 
+        lambda0_s = post["lambda0"].stack(sample=("chain", "draw")).values 
+        beta_s = post["beta"].stack(sample=("chain", "draw")).values 
+
+        # --- Vectorized Calculation (Broadcasting) ---
+        
+        # 1. Linear Predictor for each subject and MCMC sample
+        # (n_subjects, n_features) @ (n_features, n_samples) -> (n_subjects, n_samples)
+        lp = np.dot(X_arr, beta_s)
+
+        # 2. Adjusted scale per subject/sample
+        scale_s = lambda0_s * np.exp(-lp / alpha_s)
+
+        # 3. Survival Curves S(t) = exp( - (t / scale)^alpha )
+        # Shape targeted: (n_subjects, n_times, n_samples)
+        t_br = times[np.newaxis, :, np.newaxis]
+        sc_br = scale_s[:, np.newaxis, :]
+        al_br = alpha_s[np.newaxis, np.newaxis, :]
+        
+        surv_raw = np.exp(- (t_br / sc_br) ** al_br)
+        
+        # 4. Average across MCMC samples (marginalizing uncertainty)
+        surv_mean = np.mean(surv_raw, axis=2)
+
+        # Return DataFrame with Time as index and subjects as columns
+        return pd.DataFrame(surv_mean.T, index=times)
+
+    def score(self, X, duration_col, event_col):
+        """
+        Calculates the Concordance Index (C-index).
+        
+        Returns:
+            float: 0.5 (random) to 1.0 (perfect).
+        """
+        try:
+            from lifelines.utils import concordance_index
+        except ImportError:
+            raise ImportError("Package 'lifelines' is required for scoring.")
+
+        if self.idata is None:
+            raise ValueError("Model must be fitted.")
+
+        X_arr = np.asarray(X)
+        if X_arr.ndim == 1: X_arr = X_arr.reshape(-1, 1)
+
+        # 1. Get mean posterior coefficients
+        beta_mean = self.idata.posterior["beta"].mean(dim=["chain", "draw"]).values
+        
+        # 2. Calculate Risk Score
+        risk_scores = np.dot(X_arr, beta_mean)
+        
+        # 3. Calculate C-index
+        # Since High Risk = Low Survival, we use -risk_scores for the concordance index.
+        return concordance_index(duration_col, -risk_scores, event_col)
