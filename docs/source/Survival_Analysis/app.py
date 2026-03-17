@@ -6,10 +6,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import kagglehub
 
-# Import de tes classes
+# Import 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), '../../..')))
 
-# 1. On importe TES classes
 from PyBH.SurvivalAnalysis.SurvivalAnalysis import SurvivalAnalysis
 from PyBH.SurvivalAnalysis.pymc_models import WeibullPH 
 
@@ -18,7 +17,6 @@ from PyBH.SurvivalAnalysis.pymc_models import WeibullPH
 # ==========================================
 st.set_page_config(page_title="Simulateur de Carrière", page_icon="💼", layout="centered")
 
-# Changement de l'image de fond pour une ambiance "Bureaux / Entreprise"
 fond_ecran = """
 <style>
 .stApp {
@@ -38,7 +36,7 @@ st.title("💼 Simulateur de Carrière & Démission")
 st.markdown("Estimation de la durée moyenne en poste avant une démission (modèle basé sur les données RH IBM réelles).")
 
 # ==========================================
-# 2. LOGIQUE DU MODÈLE (Kagglehub intégré)
+# 2. LOGIQUE DU MODÈLE 
 # ==========================================
 @st.cache_resource
 def charger_modele():
@@ -54,9 +52,9 @@ def charger_modele():
     df = df_brut[colonnes].copy()
     
     # --- ADAPTATION FRANCE ---
-    # On applique un coefficient de 0.65 pour ramener les salaires US à une échelle Française réaliste
+    # On applique un coefficient de 0.60 pour ramener les salaires US à une échelle Française réaliste, et conversion miles en km
     df['MonthlyIncome'] = df['MonthlyIncome'] * 0.65
-
+    df['DistanceFromHome'] = df['DistanceFromHome'] * 1.6
     # 3. Nettoyage et encodage pour les maths
     # Attrition : Yes = 1 (A démissionné), No = 0 (Est resté)
     df['Attrition'] = df['Attrition'].apply(lambda x: 1 if x == 'Yes' else 0)
@@ -99,9 +97,15 @@ with col2:
 # Le bouton pour lancer la prédiction
 if st.button("🔮 Lancer l'estimation de survie en entreprise", use_container_width=True):
     
-    # L'ordre DOIT correspondre aux colonnes gardées plus haut (sans YearsAtCompany ni Attrition)
-    # Ordre : Age, DistanceFromHome, MonthlyIncome, OverTime, WorkLifeBalance
+    # Profil de l'utilisateur
     profil = np.array([[age_in, distance_in, income_in, overtime_val, wlb_in]])
+    
+    # --- NOUVEAUTÉ : CRÉATION DU PROFIL DE RÉFÉRENCE DYNAMIQUE ---
+    # 1. On récupère le profil moyen global du dataset (sous forme de DataFrame)
+    profil_de_reference = sa_app.X_df.mean().to_frame().T
+    # 2. On remplace uniquement l'âge par celui saisi par l'utilisateur
+    profil_de_reference['Age'] = age_in
+    # -------------------------------------------------------------
     
     st.markdown("---")
     st.subheader("📊 Résultats de la prédiction")
@@ -109,16 +113,28 @@ if st.button("🔮 Lancer l'estimation de survie en entreprise", use_container_w
     # Création du graphique
     fig, ax = plt.subplots(figsize=(10, 5))
     
-    # Courbe moyenne (par défaut)
-    sa_app.plot_survival_function(ax=ax, label="Moyenne IBM", color="gray", linestyle="--")
+    # Courbe de référence (Moyenne ajustée à l'âge)
+    sa_app.plot_survival_function(
+        X_pred=profil_de_reference, 
+        ax=ax, 
+        label=f"Moyenne IBM pour un profil de {age_in} ans", 
+        color="gray", 
+        linestyle="--"
+    )
     
     # Courbe du visiteur
-    sa_app.plot_survival_function(X_pred=profil, ax=ax, label="PROFIL PERSONNALISÉ", color="#0066cc", linewidth=3)
+    sa_app.plot_survival_function(
+        X_pred=profil, 
+        ax=ax, 
+        label="PROFIL PERSONNALISÉ", 
+        color="#0066cc", 
+        linewidth=3
+    )
     
     ax.set_title("Probabilité de maintien en poste au fil des années", fontsize=14, fontweight='bold')
     ax.set_xlabel("Temps passé dans l'entreprise (Années)")
     ax.set_ylabel("Probabilité de ne pas démissionner")
-    ax.set_xlim(0, 30) # On limite à 30 ans de carrière dans la même boîte
+    ax.set_xlim(0, 30) 
     
     ax.legend()
     
