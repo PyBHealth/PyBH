@@ -19,6 +19,7 @@ class PyMCModel(ABC):
         self.duration_col = None
         self.event_col = None
         self._feature_names = None
+        self.prior_predictive = None
 
     @abstractmethod
     def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
@@ -77,6 +78,37 @@ class PyMCModel(ABC):
             raise ValueError("Model must be fitted before plotting.")
         az.plot_trace(self.idata)
         plt.tight_layout()
+        plt.show()
+
+# Methods for prior/posterior predictive checks
+    def sample_predictive(self, data, samples=500):
+        if self.model is None:
+            raise ValueError("Le modèle doit être construit avant l'échantillonnage.")
+        
+        with self.model:
+            # Prior Predictive Check
+            self.prior_predictive = pm.sample_prior_predictive(samples=samples)
+            # Posterior Predictive Check (nécessite d'avoir déjà lancé fit())
+            if self.idata is not None:
+                self.idata.extend(pm.sample_posterior_predictive(self.idata))
+        return self
+
+    def plot_predictive_checks(self):
+        """Superpose les données simulées sur les données observées pour voir l'incertitude."""
+        if self.idata is None or "posterior_predictive" not in self.idata:
+            print("Lancer sample_predictive() après fit() d'abord.")
+            return
+        
+        # Utilisation d'ArviZ pour les graphiques PPC
+        az.plot_ppc(self.idata, group="posterior", kind="kde", num_pp_samples=100)
+        plt.title("Posterior Predictive Check")
+        plt.show()
+
+    def plot_energy(self):
+        """Vérifie la convergence de l'échantillonneur (HMC/NUTS)."""
+        if self.idata is None:
+            raise ValueError("Le modèle doit être entraîné (fit) d'abord.")
+        az.plot_energy(self.idata)
         plt.show()
 
     def score(self, data, duration_col, event_col):
