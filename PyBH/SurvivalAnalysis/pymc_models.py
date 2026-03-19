@@ -311,80 +311,6 @@ class Cox(PyMCModel):
         return np.exp(-risk_scores[:, :, np.newaxis] * cum_h0[:, np.newaxis, :])
 
 
-class Weibull(PyMCModel):
-    """
-    Bayesian Weibull Survival Model implementation.
-    Parameters: alpha (shape k), beta (scale eta).
-    """
-
-    def build_model(self, data, duration_col, event_col, coords=None, **kwargs):
-        # Data split: Censored (0) vs Observed (1)
-        observed = duration_col[event_col == 1]
-        censored = duration_col[event_col == 0]
-
-        # Prior for beta (scale) based on average survival time
-        mean_time = duration_col.mean()
-
-        with pm.Model(coords=coords) as model:
-            # --- Priors ---
-            # alpha (k): shape parameter. Controls if risk is increasing (>1)
-            # or decreasing (<1)
-            alpha = pm.HalfNormal("alpha", sigma=2.0)
-            # beta (eta): scale parameter. Characteristic time of failure.
-            beta = pm.HalfNormal("beta", sigma=mean_time * 5)
-
-            # --- Likelihood ---
-            # 1. Observed events: PDF f(t)
-            if len(observed) > 0:
-                pm.Weibull("obs_likelihood", alpha=alpha, beta=beta, observed=observed)
-
-            # 2. Censored events: Survival function S(t)
-            # Log(S(t)) = -(t/beta)^alpha
-            if len(censored) > 0:
-                log_surv_censored = -((censored / beta) ** alpha)
-                pm.Potential("cens_likelihood", log_surv_censored)
-
-        return model
-
-    def predict_survival_function(self, times, X_new, credible_interval=0.95):
-        """
-        Predict S(t) = exp(-(t/beta)^alpha).
-        Returns a DataFrame with mean survival and uncertainty bounds.
-        """
-        if self.idata is None:
-            raise ValueError("Fit the model first.")
-
-        # Extract posterior draws
-        stacked = self.idata.posterior.stack(sample=("chain", "draw"))
-        alpha_samples = stacked["alpha"].values
-        beta_samples = stacked["beta"].values
-
-        times = np.atleast_1d(times)
-
-        # Compute survival curves: S(t) = exp(-(t/beta)^alpha)
-        # Result shape: (num_samples, num_time_points)
-        surv_curves = np.exp(
-            -(
-                (times[np.newaxis, :] / beta_samples[:, np.newaxis])
-                ** alpha_samples[:, np.newaxis]
-            )
-        )
-
-        # Statistics
-        mean_surv = np.mean(surv_curves, axis=0)
-        lower_bound = (1 - credible_interval) / 2
-        upper_bound = 1 - lower_bound
-        hdi = np.quantile(surv_curves, [lower_bound, upper_bound], axis=0)
-
-        return pd.DataFrame(
-            {
-                "time": times,
-                "mean_survival": mean_surv,
-                f"lower_{credible_interval}": hdi[0],
-                f"upper_{credible_interval}": hdi[1],
-            }
-        ).set_index("time")
-    
 class WeibullPH(PyMCModel):
     r"""
     Weibull Proportional Hazards (PH) Model.
@@ -498,16 +424,9 @@ class WeibullPH(PyMCModel):
 
         return model
 
-    def predict_survival_function(self, times, X_new):
+    def predict_survival_function(self, times, X_new, credible_interval=0.95):
         """
         Calculates predicted survival curves S(t|x) for new data.
-        
-        Args:
-            times (array): Time points to evaluate survival.
-            X_new (array-like): Covariates for new subjects.
-            
-        Returns:
-            pd.DataFrame: Index = Time, Columns = Subject index.
         """
         if self.idata is None:
             raise ValueError("Model must be fitted before predicting.")
@@ -518,34 +437,42 @@ class WeibullPH(PyMCModel):
             
         times = np.atleast_1d(times)
 
-        # Extract posterior samples and stack chains/draws
+        # Extract posterior samples
         post = self.idata.posterior
         alpha_s = post["alpha"].stack(sample=("chain", "draw")).values 
         lambda0_s = post["lambda0"].stack(sample=("chain", "draw")).values 
         beta_s = post["beta"].stack(sample=("chain", "draw")).values 
 
-        # --- Vectorized Calculation (Broadcasting) ---
-        
-        # 1. Linear Predictor for each subject and MCMC sample
-        # (n_subjects, n_features) @ (n_features, n_samples) -> (n_subjects, n_samples)
+        # 1. Linear Predictor
         lp = np.dot(X_arr, beta_s)
 
-        # 2. Adjusted scale per subject/sample
+        # 2. Adjusted scale
         scale_s = lambda0_s * np.exp(-lp / alpha_s)
 
-        # 3. Survival Curves S(t) = exp( - (t / scale)^alpha )
-        # Shape targeted: (n_subjects, n_times, n_samples)
+        # 3. Survival Curves (Broadcasting)
         t_br = times[np.newaxis, :, np.newaxis]
         sc_br = scale_s[:, np.newaxis, :]
         al_br = alpha_s[np.newaxis, np.newaxis, :]
         
         surv_raw = np.exp(- (t_br / sc_br) ** al_br)
         
-        # 4. Average across MCMC samples (marginalizing uncertainty)
-        surv_mean = np.mean(surv_raw, axis=2)
+        # On extrait uniquement le patient cible (index 0)
+        surv_patient = surv_raw[0] 
+        
+        # On calcule la moyenne
+        mean_surv = np.mean(surv_patient, axis=1)
 
-        # Return DataFrame with Time as index and subjects as columns
-        return pd.DataFrame(surv_mean.T, index=times)
+        # On calcule les intervalles de confiance
+        lower_bound = (1 - credible_interval) / 2
+        upper_bound = 1 - lower_bound
+        hdi = np.quantile(surv_patient, [lower_bound, upper_bound], axis=1)
+
+        # On renvoie le bon dictionnaire avec les colonnes exactes
+        return pd.DataFrame({
+            "mean_survival": mean_surv,
+            f"lower_{credible_interval}": hdi[0],
+            f"upper_{credible_interval}": hdi[1]
+        }, index=times)
 
     def score(self, X, duration_col, event_col):
         """
